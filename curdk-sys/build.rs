@@ -1,6 +1,4 @@
-use {
-    std::{env, path::Path},
-};
+use std::{env, path::Path};
 
 #[cfg(target_os = "linux")]
 fn compile() -> Vec<String> {
