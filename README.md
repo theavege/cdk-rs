@@ -18,5 +18,7 @@ Rust bindings for the [Curses Development Kit](https://invisible-island.net/cdk)
 
 ## Work in process
 
-- [x] [Window](docs/FXApp.md)
-  - [x] [Screen](docs/FXComposite.md)
+- [x] [Label](https://invisible-island.net/cdk/manpage/cdk_label.3.html)
+- [x] [Graph](https://invisible-island.net/cdk/manpage/cdk_graph.3.html)
+- [x] [Button](https://invisible-island.net/cdk/manpage/cdk_button.3.html)
+- [x] [ButtonBox](https://invisible-island.net/cdk/manpage/cdk_buttonbox.3.html)

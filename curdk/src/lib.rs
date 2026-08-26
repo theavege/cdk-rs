@@ -5,6 +5,12 @@ use {
     std::ffi::{CString, c_int},
 };
 
+pub use curdk_sys::CENTER;
+const SHADOW: i32 = false as i32;
+const BOX: i32 = false as i32;
+
+unsafe extern "C" fn callback(_btn: *mut CDKBUTTON) {}
+
 pub trait ObjectExt: Sized {
     type T: 'static;
     fn as_raw(&self) -> *mut Self::T;
@@ -101,15 +107,120 @@ impl Drop for Screen {
 
 impl_cdk!(AlphaList, CDKALPHALIST);
 impl_cdk!(Button, CDKBUTTON);
+impl Button {
+    pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, message_: &str) -> Self {
+        let message = CString::new(message_).expect("CString::new failed");
+        Self::from_raw(unsafe {
+            newCDKButton(
+                cdkscreen.as_raw(),
+                xpos as c_int,
+                ypos as c_int,
+                message.as_ptr(),
+                Some(callback),
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+}
 impl_cdk!(ButtonBox, CDKBUTTONBOX);
+impl ButtonBox {
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        height: u32,
+        width: u32,
+        rows: u32,
+        cols: u32,
+        buttons_: &[&str],
+    ) -> Self {
+        let buttons = buttons_
+            .iter()
+            .map(|arg| CString::new(*arg).unwrap())
+            .map(|arg| arg.as_ptr())
+            .collect::<Vec<*const i8>>();
+        Self::from_raw(unsafe {
+            newCDKButtonbox(
+                cdkscreen.as_raw(),
+                xpos as c_int,
+                ypos as c_int,
+                height as c_int,
+                width as c_int,
+                std::ptr::null(),
+                rows as c_int,
+                cols as c_int,
+                buttons.as_ptr(),
+                buttons.len() as c_int,
+                curdk_sys::A_NORMAL,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+}
 impl_cdk!(Calendar, CDKCALENDAR);
 impl_cdk!(Dialog, CDKDIALOG);
 impl_cdk!(Entry, CDKENTRY);
+impl_cdk!(FileSelect, CDKFSELECT);
 impl_cdk!(Graph, CDKGRAPH);
+impl Graph {
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        height: u32,
+        width: u32,
+        title_: &str,
+        xtitle_: &str,
+        ytitle_: &str,
+    ) -> Self {
+        let title = CString::new(title_).expect("CString::new failed");
+        let xtitle = CString::new(xtitle_).expect("CString::new failed");
+        let ytitle = CString::new(ytitle_).expect("CString::new failed");
+        Self::from_raw(unsafe {
+            newCDKGraph(
+                cdkscreen.as_raw(),
+                xpos as c_int,
+                ypos as c_int,
+                height as c_int,
+                width as c_int,
+                title.as_ptr(),
+                xtitle.as_ptr(),
+                ytitle.as_ptr(),
+            )
+        })
+    }
+}
 impl_cdk!(Histogram, CDKHISTOGRAM);
+impl Histogram {
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        height: u32,
+        width: u32,
+        orient: u32,
+        title_: &str,
+    ) -> Self {
+        let title = CString::new(title_).expect("CString::new failed");
+        Self::from_raw(unsafe {
+            newCDKHistogram(
+                cdkscreen.as_raw(),
+                xpos as c_int,
+                ypos as c_int,
+                height as c_int,
+                width as c_int,
+                orient as c_int,
+                title.as_ptr(),
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+}
 impl_cdk!(ItemList, CDKITEMLIST);
 impl_cdk!(Label, CDKLABEL);
-
 impl Label {
     pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, message_: &str) -> Self {
         let message = CString::new(message_).expect("CString::new failed");
@@ -120,8 +231,8 @@ impl Label {
                 ypos as c_int,
                 &message.as_ptr(),
                 1,
-                0,
-                0,
+                BOX,
+                SHADOW,
             )
         })
     }
@@ -133,7 +244,6 @@ impl Label {
         unsafe { setCDKLabelBox(self.as_raw(), bx as i32) }
     }
 }
-
 impl_cdk!(Marquee, CDKMARQUEE);
 impl_cdk!(Matrix, CDKMATRIX);
 impl_cdk!(Mentry, CDKMENTRY);
@@ -143,4 +253,4 @@ impl_cdk!(Scale, CDKSCALE);
 impl_cdk!(Scroll, CDKSCROLL);
 impl_cdk!(Selection, CDKSELECTION);
 impl_cdk!(Slider, CDKSLIDER);
-impl_cdk!(Viewer, CDKVIEWER);
+impl_cdk!(FileViewer, CDKVIEWER);
