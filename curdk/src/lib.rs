@@ -106,6 +106,11 @@ impl Drop for Screen {
 }
 
 impl_cdk!(AlphaList, CDKALPHALIST);
+impl AlphaList {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKAlphalistBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Button, CDKBUTTON);
 impl Button {
     pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, message_: &str) -> Self {
@@ -160,9 +165,53 @@ impl ButtonBox {
     }
 }
 impl_cdk!(Calendar, CDKCALENDAR);
+impl Calendar {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKCalendarBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Dialog, CDKDIALOG);
+impl Dialog {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKDialogBox(self.as_raw(), bx as i32) }
+    }
+}
+impl_cdk!(DScale, CDKDSCALE);
+impl DScale {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKDScaleBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Entry, CDKENTRY);
-impl_cdk!(FileSelect, CDKFSELECT);
+impl Entry {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKEntryBox(self.as_raw(), bx as i32) }
+    }
+}
+impl_cdk!(FSelect, CDKFSELECT);
+impl FSelect {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKFselectBox(self.as_raw(), bx as i32) }
+    }
+}
+impl_cdk!(FViewer, CDKVIEWER);
+impl FViewer {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKViewerBox(self.as_raw(), bx as i32) }
+    }
+}
+impl_cdk!(FScale, CDKFSCALE);
+impl FScale {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKFScaleBox(self.as_raw(), bx as i32) }
+    }
+}
+impl_cdk!(FSlider, CDKFSLIDER);
+impl FSlider {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKFSliderBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Graph, CDKGRAPH);
 impl Graph {
     pub fn new(
@@ -220,6 +269,11 @@ impl Histogram {
     }
 }
 impl_cdk!(ItemList, CDKITEMLIST);
+impl ItemList {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKItemlistBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Label, CDKLABEL);
 impl Label {
     pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, message_: &str) -> Self {
@@ -245,12 +299,51 @@ impl Label {
     }
 }
 impl_cdk!(Marquee, CDKMARQUEE);
+impl Marquee {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKMarqueeBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Matrix, CDKMATRIX);
+impl Matrix {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKMatrixBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Mentry, CDKMENTRY);
+impl Mentry {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKMentryBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Menu, CDKMENU);
 impl_cdk!(Radio, CDKRADIO);
+impl Radio {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKRadioBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Scale, CDKSCALE);
+impl Scale {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKScaleBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Scroll, CDKSCROLL);
+impl Scroll {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKScrollBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Selection, CDKSELECTION);
+impl Selection {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKSelectionBox(self.as_raw(), bx as i32) }
+    }
+}
 impl_cdk!(Slider, CDKSLIDER);
-impl_cdk!(FileViewer, CDKVIEWER);
+impl Slider {
+    pub fn set_box(&self, bx: bool) {
+        unsafe { setCDKSliderBox(self.as_raw(), bx as i32) }
+    }
+}

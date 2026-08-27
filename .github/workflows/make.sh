@@ -7,9 +7,9 @@ if ! command -v cdk5-config >/dev/null; then
     case ${ID:?} in
         debian | ubuntu) sudo bash -c '
             apt-get update
-            apt-get install -y shfmt cppcheck shellcheck libcdk5-dev
+            apt-get install -y sh{ellcheck,fmt} libcdk5-dev
         ' ;;
-        fedora | alma) sudo dnf install -y shfmt cppcheck shellcheck cdk-devel ;;
+        fedora | alma) sudo dnf install -y sh{ellcheck,fmt} cdk-devel ;;
     esac 1>/dev/null
 fi
 
