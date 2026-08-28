@@ -12,3 +12,4 @@ exclude = ["examples"]
 
 [dependencies]
 curdk-sys = { path = "../curdk-sys", version = "=0.0.1"}
+paste = { version = "1.0" }
