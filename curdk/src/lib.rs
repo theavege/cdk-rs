@@ -2,7 +2,7 @@
 
 use {
     curdk_sys::*,
-    std::ffi::{CString, c_int, c_uint},
+    std::ffi::{CString, c_int},
 };
 
 pub use curdk_sys::CENTER;
@@ -53,8 +53,16 @@ macro_rules! impl_cdk {
                 pub fn set_box(&self, bx: bool) {
                     unsafe { [<setCDK $name Box>](self.as_raw(), bx as i32) }
                 }
-                pub fn set_activate(&self, activate: u32) {
-                    unsafe { [<activateCDK $name Box>](self.as_raw(), activate as c_uint) }
+                pub fn bx(&self) -> bool {
+                    unsafe { [<getCDK $name Box>](self.as_raw()) != 0 }
+                }
+                pub fn draw(&self) {
+                    unsafe {
+                        let mut ptr: $ptr = self.0.unwrap().read();
+                        if let Some(func) = (*ptr.obj.fn_).drawObj {
+                            func(&mut ptr.obj, self.bx() as i32);
+                        }
+                    }
                 }
             }
         }

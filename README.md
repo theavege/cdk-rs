@@ -4,6 +4,28 @@
 
 Rust bindings for the [Curses Development Kit](https://invisible-island.net/cdk)
 
+## What is CDK[^1]?
+
+CDK  is  a library  of functions which allow a programmer to quickly create a full screen interactive program with ease. The CDK  widgets support the following features:
+
+Ncurses library.
+: Instead  of  using the standard curses library, CDK can take advantage of the colors that Ncurses provides.
+
+Key Bindings.
+: Individual keys can be overridden with a callback.
+
+Pre and Post Processing.
+: Certain  widgets  allow  the user to trap a character before and after the character has been applied to the widget.  This allows programmers to "filter" character input.
+
+Self Test Widgets.
+: With the use of the inject function class and the activate function,  programmers  can  have the widgets test themselves.
+
+Special Display Formats.
+: There are special character format commands that can be inserted into any string in CDK and the contents will  get  mapped  to  a chtype  (see  the curses manual page) with character attributes. This allows the programmer to insert format types on each  character if they wish.
+
+The Ability To Build Predefined Screens.
+: Widgets can be associated to any given screen. If there is more than one screen defined, then CDK has the ability to "flip" from one screen to another with ease.
+
 ## Dependencies
 
 - [Linux](.github/workflows/make.sh)
@@ -46,3 +68,5 @@ Rust bindings for the [Curses Development Kit](https://invisible-island.net/cdk)
 - [ ] [Scroll](https://invisible-island.net/cdk/manpage/cdk_scroll.3.html) -> Scrolling List
 - [ ] [Selection](https://invisible-island.net/cdk/manpage/cdk_scroll.3.html) -> Scrolling Selection List
 - [ ] [SWindow](https://invisible-island.net/cdk/manpage/cdk_scroll.3.html) -> Scrolling Window
+
+[^1]: [Curses Development Kit](https://invisible-island.net/cdk).
