@@ -4,7 +4,7 @@
 
 Rust bindings for the [Curses Development Kit](https://invisible-island.net/cdk)
 
-## What is CDK[^1]?
+## What is CDK [^1]?
 
 CDK  is  a library  of functions which allow a programmer to quickly create a full screen interactive program with ease. The CDK  widgets support the following features:
 
@@ -25,6 +25,12 @@ Special Display Formats.
 
 The Ability To Build Predefined Screens.
 : Widgets can be associated to any given screen. If there is more than one screen defined, then CDK has the ability to "flip" from one screen to another with ease.
+
+# Why CDK?
+
+To develop console-based interfaces, there is a library found on all Linux systems called ncurses. ncurses is to console interfaces what Xlib is to graphical interfaces. It contains everything needed to create console-based interfaces while remaining fairly low-level. Although the standard HOWTO collection includes an Ncurses HOWTO, ncurses is nevertheless not a library that can be approached very intuitively, and a great deal of time must be spent before one can program a satisfactory interface.
+
+There is a higher-level and easier-to-use library that brings together numerous pre-built widgets. It is called CDK, an acronym for Curses Development Kit [^1]. CDK is a library written in C. Nevertheless, it was designed in a strongly object-oriented style, with each widget having methods in the form of associated functions. A rigorous definition of the structures and the casting of pointers also provides a semblance of inheritance.
 
 ## Dependencies
 

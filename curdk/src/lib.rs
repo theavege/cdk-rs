@@ -2,14 +2,12 @@
 
 use {
     curdk_sys::*,
-    std::ffi::{CString, c_int},
+    std::ffi::{CString, c_char, c_int},
 };
 
-pub use curdk_sys::CENTER;
+pub use curdk_sys::{BOTTOM, CENTER, LEFT, RIGHT, TOP};
 const SHADOW: i32 = false as i32;
 const BOX: i32 = false as i32;
-
-unsafe extern "C" fn callback(_btn: *mut CDKBUTTON) {}
 
 pub trait ObjectExt: Sized {
     type T: 'static;
@@ -134,11 +132,14 @@ impl Button {
                 xpos as c_int,
                 ypos as c_int,
                 message.as_ptr(),
-                Some(callback),
+                None,
                 BOX,
                 SHADOW,
             )
         })
+    }
+    pub fn activate(&self) -> i32 {
+        unsafe { activateCDKButton(self.as_raw(), std::ptr::null_mut()) }
     }
 }
 impl_cdk!(Buttonbox, CDKBUTTONBOX);
@@ -169,7 +170,7 @@ impl Buttonbox {
                 rows as c_int,
                 cols as c_int,
                 buttons.as_ptr(),
-                buttons.len() as c_int,
+                buttons_.len() as c_int,
                 curdk_sys::A_NORMAL,
                 BOX,
                 SHADOW,
@@ -179,8 +180,63 @@ impl Buttonbox {
 }
 impl_cdk!(Calendar, CDKCALENDAR);
 impl_cdk!(Dialog, CDKDIALOG);
+impl Dialog {
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        message_: &str,
+        rows: u32,
+        buttons_: &[&str],
+    ) -> Self {
+        let message = CString::new(message_).expect("CString::new failed");
+        let buttons = buttons_
+            .iter()
+            .map(|arg| CString::new(*arg).unwrap())
+            .map(|arg| arg.as_ptr())
+            .collect::<Vec<*const i8>>();
+        Self::from_raw(unsafe {
+            newCDKDialog(
+                cdkscreen.as_raw(),
+                xpos as c_int,
+                ypos as c_int,
+                &message.as_ptr(),
+                rows as c_int,
+                buttons.as_ptr(),
+                buttons_.len() as c_int,
+                curdk_sys::A_NORMAL,
+                0,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+}
 impl_cdk!(DScale, CDKDSCALE);
 impl_cdk!(Entry, CDKENTRY);
+impl Entry {
+    pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, title_: &str, label_: &str) -> Self {
+        let title = CString::new(title_).expect("CString::new failed");
+        let label = CString::new(label_).expect("CString::new failed");
+        Self::from_raw(unsafe {
+            newCDKEntry(
+                cdkscreen.as_raw(),
+                xpos as c_int,
+                ypos as c_int,
+                title.as_ptr(),
+                label.as_ptr(),
+                curdk_sys::A_NORMAL,
+                0,
+                0,
+                0,
+                label_.len() as c_int,
+                label_.len() as c_int,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+}
 impl_cdk!(Fselect, CDKFSELECT);
 impl_cdk!(Viewer, CDKVIEWER);
 impl_cdk!(FScale, CDKFSCALE);
@@ -261,6 +317,13 @@ impl Label {
     pub fn set_message(&self, message_: &str) {
         let message = CString::new(message_).expect("CString::new failed");
         unsafe { setCDKLabelMessage(self.as_raw(), &message.as_ptr(), 1) }
+    }
+    /// Waits  for  a  user  to press a key.
+    ///
+    /// This function initializes the EFL libraries, creates the window using the provided
+    /// function, and starts the main event loop.
+    pub fn wait(&self, key: char) -> char {
+        unsafe { waitCDKLabel(self.as_raw(), key as c_char) as u8 as char }
     }
 }
 impl_cdk!(Marquee, CDKMARQUEE);
