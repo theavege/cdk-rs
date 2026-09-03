@@ -5,10 +5,13 @@ authors = ["Artem V. Ageev <artem.v.ageev@gmail.com>"]
 license = "GPL-2"
 repository = "https://github.com/theavege/curdk-rs"
 description = "Rust bindings for the Curses Development Kit"
+readme = "README.md"
+homepage = "https://github.com/theavege/cdk-rs"
+documentation = "https://docs.rs/curdk"
 keywords = ["CDK", "curdk"]
 categories = ["api-bindings", "tui"]
 edition = "2024"
-exclude = ["examples"]
+
 
 [dependencies]
 curdk-sys = { path = "../curdk-sys", version = "=0.0.1"}

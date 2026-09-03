@@ -35,6 +35,10 @@ There is a higher-level and easier-to-use library that brings together numerous 
 ## Dependencies
 
 - [Linux](.github/workflows/make.sh)
+- CDK5 development files, ncurses, and libclang
+
+Terminal and widget constructors return `Result` values. Applications should handle
+initialization failures and strings containing NUL bytes instead of relying on panics.
 
 ## Other bindings for CDK
 

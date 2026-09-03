@@ -19,6 +19,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libcdk5-dev pkg-config shellcheck shfmt
+
       - name: Build on Unix
         shell: bash
         run: |
