@@ -7,15 +7,14 @@ fn cdk5_config() -> Command {
     }
 
     let candidates = [
-        "cdk5-config",
-        "/usr/lib/x86_64-linux-gnu/libcdk5-dev/bin/cdk5-config",
-        "/usr/lib/aarch64-linux-gnu/libcdk5-dev/bin/cdk5-config",
+        Path::new("/usr/lib/x86_64-linux-gnu/libcdk5-dev/bin/cdk5-config"),
+        Path::new("/usr/lib/aarch64-linux-gnu/libcdk5-dev/bin/cdk5-config"),
     ];
     candidates
         .iter()
-        .find(|path| Path::new(path).exists())
+        .find(|path| path.exists())
         .map(Command::new)
-        .expect("Unable to find cdk5-config")
+        .unwrap_or_else(|| Command::new("cdk5-config"))
 }
 
 #[cfg(target_os = "linux")]
@@ -26,8 +25,13 @@ fn compile() -> Vec<String> {
     let output = cdk5_config()
         .arg("--cflags")
         .output()
-        .expect("Unable to execute cdk5-config");
-    assert!(output.status.success(), "cdk5-config --cflags failed");
+        .unwrap_or_else(|error| panic!("Unable to execute cdk5-config: {error}"));
+    if !output.status.success() {
+        panic!(
+            "cdk5-config --cflags failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
     String::from_utf8(output.stdout)
         .expect("cdk5-config returned invalid UTF-8")
         .split_whitespace()
@@ -42,6 +46,7 @@ fn compile() -> Vec<String> {
 
 fn main() {
     println!("cargo:rerun-if-changed=src/wrapper.h");
+    println!("cargo:rerun-if-env-changed=CDK5_CONFIG");
     bindgen::Builder::default()
         .header("src/wrapper.h")
         .clang_args(compile())

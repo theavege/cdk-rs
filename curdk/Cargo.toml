@@ -16,3 +16,6 @@ edition = "2024"
 [dependencies]
 curdk-sys = { path = "../curdk-sys", version = "=0.0.1"}
 paste = { version = "1.0" }
+
+[dev-dependencies]
+libc = "0.2"

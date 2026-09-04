@@ -8,5 +8,6 @@
 #![allow(clippy::ptr_offset_with_cast)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::approx_constant)]
+#![allow(suspicious_runtime_symbol_definitions)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

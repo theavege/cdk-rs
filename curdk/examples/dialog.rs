@@ -10,8 +10,8 @@ fn main() -> Result<(), curdk::Error> {
         &["Yes", "No"],
     )?;
 
-    let selection = dialog.activate();
+    let selection = dialog.activate_result()?;
     screen.exit();
-    println!("Selected button: {selection}");
+    println!("Dialog result: {selection:?}");
     Ok(())
 }

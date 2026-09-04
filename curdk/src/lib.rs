@@ -18,6 +18,7 @@ screen.refresh();
 use {
     curdk_sys::*,
     std::{
+        cell::Cell,
         error::Error as StdError,
         ffi::{CStr, CString, NulError, c_char, c_int},
         ptr::NonNull,
@@ -30,12 +31,26 @@ pub use curdk_sys::{BOTTOM, CENTER, LEFT, RIGHT, TOP};
 const SHADOW: i32 = false as i32;
 const BOX: i32 = false as i32;
 
+pub trait Widget {
+    fn set_box(&self, bx: bool);
+    fn is_boxed(&self) -> bool;
+    fn draw(&self);
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Activation {
+    Selected(usize),
+    Cancelled,
+}
+
 #[derive(Debug)]
 pub enum Error {
     NullHandle(&'static str),
     InteriorNul(NulError),
     ValueOutOfRange(&'static str, u64),
     InvalidUtf8(Utf8Error),
+    InvalidActivation(i32),
+    LengthMismatch(&'static str, usize, usize),
 }
 
 impl std::fmt::Display for Error {
@@ -50,6 +65,15 @@ impl std::fmt::Display for Error {
                 )
             }
             Self::InvalidUtf8(error) => error.fmt(formatter),
+            Self::InvalidActivation(value) => {
+                write!(
+                    formatter,
+                    "CDK returned an invalid activation value {value}"
+                )
+            }
+            Self::LengthMismatch(name, expected, actual) => {
+                write!(formatter, "{name} has length {actual}, expected {expected}")
+            }
         }
     }
 }
@@ -72,6 +96,14 @@ fn checked_c_int(value: u64, name: &'static str) -> Result<c_int, Error> {
     c_int::try_from(value).map_err(|_| Error::ValueOutOfRange(name, value))
 }
 
+fn activation(value: i32) -> Result<Activation, Error> {
+    match value {
+        -1 => Ok(Activation::Cancelled),
+        value if value >= 0 => Ok(Activation::Selected(value as usize)),
+        value => Err(Error::InvalidActivation(value)),
+    }
+}
+
 unsafe fn owned_c_string(ptr: *const c_char, name: &'static str) -> Result<String, Error> {
     let ptr = NonNull::new(ptr as *mut c_char).ok_or(Error::NullHandle(name))?;
     Ok(unsafe { CStr::from_ptr(ptr.as_ptr()) }.to_str()?.to_owned())
@@ -79,6 +111,7 @@ unsafe fn owned_c_string(ptr: *const c_char, name: &'static str) -> Result<Strin
 
 struct WindowOwner {
     ptr: NonNull<WINDOW>,
+    ended: Cell<bool>,
 }
 
 struct ScreenOwner {
@@ -91,6 +124,15 @@ impl Drop for ScreenOwner {
         unsafe {
             destroyCDKScreen(self.ptr.as_ptr());
             endCDK();
+        }
+        self._window.ended.set(true);
+    }
+}
+
+impl Drop for WindowOwner {
+    fn drop(&mut self) {
+        if !self.ended.replace(true) {
+            unsafe { endwin() };
         }
     }
 }
@@ -115,6 +157,15 @@ macro_rules! impl_object {
                 self.ptr.as_ptr()
             }
         }
+
+        impl Drop for $name {
+            fn drop(&mut self) {
+                unsafe {
+                    let mut object = self.ptr.as_ptr().read();
+                    _destroyCDKObject(&mut object.obj);
+                }
+            }
+        }
     };
 }
 
@@ -132,11 +183,24 @@ macro_rules! impl_cdk {
                 pub fn draw(&self) {
                     unsafe {
                         let ptr = self.as_raw();
-                        if let Some(func) = (*ptr).obj.fn_.as_ref().unwrap().drawObj {
-                            func(&mut (*ptr).obj, self.bx() as i32);
+                        if let Some(functions) = (*ptr).obj.fn_.as_ref() {
+                            if let Some(func) = functions.drawObj {
+                                func(&mut (*ptr).obj, self.bx() as i32);
+                            }
                         }
                     }
                 }
+            }
+        }
+        impl Widget for $name {
+            fn set_box(&self, bx: bool) {
+                self.set_box(bx);
+            }
+            fn is_boxed(&self) -> bool {
+                self.bx()
+            }
+            fn draw(&self) {
+                self.draw();
             }
         }
     };
@@ -151,6 +215,7 @@ impl Window {
         Ok(Self {
             owner: Rc::new(WindowOwner {
                 ptr: NonNull::new(unsafe { initscr() }).ok_or(Error::NullHandle("Window"))?,
+                ended: Cell::new(false),
             }),
         })
     }
@@ -229,6 +294,9 @@ impl Button {
     pub fn activate(&self) -> i32 {
         unsafe { activateCDKButton(self.as_raw(), std::ptr::null_mut()) }
     }
+    pub fn activate_result(&self) -> Result<Activation, Error> {
+        activation(self.activate())
+    }
 }
 impl_cdk!(Buttonbox, CDKBUTTONBOX);
 impl Buttonbox {
@@ -276,6 +344,14 @@ impl Buttonbox {
             )
         })
     }
+
+    pub fn activate(&self) -> i32 {
+        unsafe { activateCDKButtonbox(self.as_raw(), std::ptr::null_mut()) }
+    }
+
+    pub fn activate_result(&self) -> Result<Activation, Error> {
+        activation(self.activate())
+    }
 }
 impl_cdk!(Calendar, CDKCALENDAR);
 impl_cdk!(Dialog, CDKDIALOG);
@@ -321,6 +397,9 @@ impl Dialog {
 
     pub fn activate(&self) -> i32 {
         unsafe { activateCDKDialog(self.as_raw(), std::ptr::null_mut()) }
+    }
+    pub fn activate_result(&self) -> Result<Activation, Error> {
+        activation(self.activate())
     }
 }
 impl_cdk!(DScale, CDKDSCALE);
@@ -493,9 +572,292 @@ impl_cdk!(Marquee, CDKMARQUEE);
 impl_cdk!(Matrix, CDKMATRIX);
 impl_cdk!(Mentry, CDKMENTRY);
 impl_cdk!(Radio, CDKRADIO);
+impl Radio {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        spos: u32,
+        height: u32,
+        width: u32,
+        title_: &str,
+        items_: &[&str],
+        choice_char: char,
+        default_item: u32,
+    ) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let spos = checked_c_int(spos as u64, "scrollbar position")?;
+        let height = checked_c_int(height as u64, "height")?;
+        let width = checked_c_int(width as u64, "width")?;
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let default_item = checked_c_int(default_item as u64, "default item")?;
+        let title = CString::new(title_)?;
+        let item_strings = items_
+            .iter()
+            .map(|item| CString::new(*item))
+            .collect::<Result<Vec<CString>, NulError>>()?;
+        let mut items = item_strings
+            .iter()
+            .map(|item| item.as_ptr() as *mut c_char)
+            .collect::<Vec<*mut c_char>>();
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKRadio(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                spos,
+                height,
+                width,
+                title.as_ptr(),
+                items.as_mut_ptr(),
+                item_count,
+                choice_char as curdk_sys::chtype,
+                default_item,
+                curdk_sys::A_NORMAL,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) -> i32 {
+        unsafe { activateCDKRadio(self.as_raw(), std::ptr::null_mut()) }
+    }
+
+    pub fn activate_result(&self) -> Result<Activation, Error> {
+        activation(self.activate())
+    }
+
+    pub fn current(&self) -> i32 {
+        unsafe { getCDKRadioCurrentItem(self.as_raw()) }
+    }
+
+    pub fn set_current(&self, item: u32) -> Result<(), Error> {
+        let item = checked_c_int(item as u64, "item index")?;
+        unsafe { setCDKRadioCurrentItem(self.as_raw(), item) };
+        Ok(())
+    }
+
+    pub fn set_items(&self, items_: &[&str]) -> Result<(), Error> {
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let item_strings = items_
+            .iter()
+            .map(|item| CString::new(*item))
+            .collect::<Result<Vec<CString>, NulError>>()?;
+        let mut items = item_strings
+            .iter()
+            .map(|item| item.as_ptr() as *mut c_char)
+            .collect::<Vec<*mut c_char>>();
+        unsafe { setCDKRadioItems(self.as_raw(), items.as_mut_ptr(), item_count) };
+        Ok(())
+    }
+}
 impl_cdk!(Scale, CDKSCALE);
 impl_cdk!(Scroll, CDKSCROLL);
+impl Scroll {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        spos: u32,
+        height: u32,
+        width: u32,
+        title_: &str,
+        items_: &[&str],
+        numbers: bool,
+    ) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let spos = checked_c_int(spos as u64, "scrollbar position")?;
+        let height = checked_c_int(height as u64, "height")?;
+        let width = checked_c_int(width as u64, "width")?;
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let title = CString::new(title_)?;
+        let item_strings = items_
+            .iter()
+            .map(|item| CString::new(*item))
+            .collect::<Result<Vec<CString>, NulError>>()?;
+        let mut items = item_strings
+            .iter()
+            .map(|item| item.as_ptr() as *mut c_char)
+            .collect::<Vec<*mut c_char>>();
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKScroll(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                spos,
+                height,
+                width,
+                title.as_ptr(),
+                items.as_mut_ptr(),
+                item_count,
+                numbers as i32,
+                curdk_sys::A_NORMAL,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) -> i32 {
+        unsafe { activateCDKScroll(self.as_raw(), std::ptr::null_mut()) }
+    }
+
+    pub fn activate_result(&self) -> Result<Activation, Error> {
+        activation(self.activate())
+    }
+
+    pub fn current(&self) -> i32 {
+        unsafe { getCDKScrollCurrent(self.as_raw()) }
+    }
+
+    pub fn set_current(&self, item: u32) -> Result<(), Error> {
+        let item = checked_c_int(item as u64, "item index")?;
+        unsafe { setCDKScrollCurrent(self.as_raw(), item) };
+        Ok(())
+    }
+
+    pub fn set_items(&self, items_: &[&str], numbers: bool) -> Result<(), Error> {
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let item_strings = items_
+            .iter()
+            .map(|item| CString::new(*item))
+            .collect::<Result<Vec<CString>, NulError>>()?;
+        let mut items = item_strings
+            .iter()
+            .map(|item| item.as_ptr() as *mut c_char)
+            .collect::<Vec<*mut c_char>>();
+        unsafe {
+            setCDKScrollItems(
+                self.as_raw(),
+                items.as_mut_ptr(),
+                item_count,
+                numbers as i32,
+            );
+        }
+        Ok(())
+    }
+}
 impl_cdk!(Selection, CDKSELECTION);
+impl Selection {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        spos: u32,
+        height: u32,
+        width: u32,
+        title_: &str,
+        items_: &[&str],
+        choice_markers_: &[&str],
+        selections_: &[bool],
+    ) -> Result<Self, Error> {
+        if items_.len() != selections_.len() {
+            return Err(Error::LengthMismatch(
+                "selection choices",
+                items_.len(),
+                selections_.len(),
+            ));
+        }
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let spos = checked_c_int(spos as u64, "scrollbar position")?;
+        let height = checked_c_int(height as u64, "height")?;
+        let width = checked_c_int(width as u64, "width")?;
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let title = CString::new(title_)?;
+        let item_strings = items_
+            .iter()
+            .map(|item| CString::new(*item))
+            .collect::<Result<Vec<CString>, NulError>>()?;
+        let mut items = item_strings
+            .iter()
+            .map(|item| item.as_ptr() as *mut c_char)
+            .collect::<Vec<*mut c_char>>();
+        let choice_count = checked_c_int(choice_markers_.len() as u64, "choice marker count")?;
+        let choice_strings = choice_markers_
+            .iter()
+            .map(|choice| CString::new(*choice))
+            .collect::<Result<Vec<CString>, NulError>>()?;
+        let mut choice_markers = choice_strings
+            .iter()
+            .map(|choice| choice.as_ptr() as *mut c_char)
+            .collect::<Vec<*mut c_char>>();
+        let mut selections = selections_
+            .iter()
+            .map(|selection| i32::from(*selection))
+            .collect::<Vec<c_int>>();
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKSelection(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                spos,
+                height,
+                width,
+                title.as_ptr(),
+                items.as_mut_ptr(),
+                item_count,
+                choice_markers.as_mut_ptr(),
+                choice_count,
+                curdk_sys::A_NORMAL,
+                BOX,
+                SHADOW,
+            )
+        })
+        .inspect(|selection| {
+            unsafe { setCDKSelectionChoices(selection.as_raw(), selections.as_mut_ptr()) };
+        })
+    }
+
+    pub fn activate(&self) -> i32 {
+        unsafe { activateCDKSelection(self.as_raw(), std::ptr::null_mut()) }
+    }
+
+    pub fn activate_result(&self) -> Result<Activation, Error> {
+        activation(self.activate())
+    }
+
+    pub fn current(&self) -> i32 {
+        unsafe { getCDKSelectionCurrent(self.as_raw()) }
+    }
+
+    pub fn set_current(&self, item: u32) -> Result<(), Error> {
+        let item = checked_c_int(item as u64, "item index")?;
+        unsafe { setCDKSelectionCurrent(self.as_raw(), item) };
+        Ok(())
+    }
+
+    pub fn choice(&self, item: u32) -> Result<bool, Error> {
+        let item = checked_c_int(item as u64, "item index")?;
+        Ok(unsafe { getCDKSelectionChoice(self.as_raw(), item) != 0 })
+    }
+
+    pub fn set_choice(&self, item: u32, selected: bool) -> Result<(), Error> {
+        let item = checked_c_int(item as u64, "item index")?;
+        unsafe { setCDKSelectionChoice(self.as_raw(), item, i32::from(selected)) };
+        Ok(())
+    }
+
+    pub fn set_items(&self, items_: &[&str]) -> Result<(), Error> {
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let item_strings = items_
+            .iter()
+            .map(|item| CString::new(*item))
+            .collect::<Result<Vec<CString>, NulError>>()?;
+        let mut items = item_strings
+            .iter()
+            .map(|item| item.as_ptr() as *mut c_char)
+            .collect::<Vec<*mut c_char>>();
+        unsafe { setCDKSelectionItems(self.as_raw(), items.as_mut_ptr(), item_count) };
+        Ok(())
+    }
+}
 impl_cdk!(Slider, CDKSLIDER);
 
 #[cfg(test)]
@@ -524,6 +886,13 @@ mod tests {
             checked_c_int(c_int::MAX as u64 + 1, "width"),
             Err(Error::ValueOutOfRange("width", _))
         ));
+    }
+
+    #[test]
+    fn activation_values_are_typed() {
+        assert_eq!(activation(2).unwrap(), Activation::Selected(2));
+        assert_eq!(activation(-1).unwrap(), Activation::Cancelled);
+        assert!(matches!(activation(-2), Err(Error::InvalidActivation(-2))));
     }
 
     #[test]
