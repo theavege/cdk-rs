@@ -142,3 +142,169 @@ fn selection_supports_multiple_choices() {
         Ok(())
     });
 }
+
+#[test]
+fn menu_supports_nested_items() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let menu = curdk::Menu::new(
+            &screen,
+            &[&["File", "Edit"], &["Open", "Quit"]],
+            &[(1, 1), (1, 10)],
+            0,
+        )?;
+        menu.set_current(1, 1)?;
+        assert_eq!(menu.current(), (1, 1));
+        Ok(())
+    });
+}
+
+#[test]
+fn calendar_supports_date_updates() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let calendar =
+            curdk::Calendar::new(&screen, curdk::CENTER, curdk::CENTER, "Date", 4, 7, 2026)?;
+        calendar.set_date(15, 8, 2027)?;
+        assert_eq!(calendar.date(), (15, 8, 2027));
+        Ok(())
+    });
+}
+
+#[test]
+fn scale_supports_numeric_updates() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let scale = curdk::Scale::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "Scale",
+            "Value: ",
+            8,
+            5,
+            0,
+            10,
+            1,
+            2,
+        )?;
+        scale.set_value(7);
+        scale.set_range(-5, 20);
+        assert_eq!(scale.value(), 7);
+        assert_eq!(scale.range(), (-5, 20));
+        Ok(())
+    });
+}
+
+#[test]
+fn slider_supports_numeric_updates() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let slider = curdk::Slider::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "Slider",
+            "Value: ",
+            8,
+            5,
+            0,
+            10,
+            1,
+            2,
+        )?;
+        slider.set_value(7);
+        slider.set_range(-5, 20);
+        assert_eq!(slider.value(), 7);
+        assert_eq!(slider.range(), (-5, 20));
+        Ok(())
+    });
+}
+
+#[test]
+fn floating_scale_supports_numeric_updates() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let scale = curdk::FScale::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "FScale",
+            "Value: ",
+            8,
+            1.5,
+            0.0,
+            10.0,
+            0.5,
+            1.0,
+            2,
+        )?;
+        scale.set_value(3.25);
+        scale.set_range(-1.0, 20.0);
+        scale.set_digits(3)?;
+        assert!((scale.value() - 3.25).abs() < f32::EPSILON);
+        assert_eq!(scale.range(), (-1.0, 20.0));
+        assert_eq!(scale.digits(), 3);
+        Ok(())
+    });
+}
+
+#[test]
+fn floating_slider_supports_numeric_updates() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let slider = curdk::FSlider::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "FSlider",
+            "Value: ",
+            8,
+            1.5,
+            0.0,
+            10.0,
+            0.5,
+            1.0,
+            2,
+        )?;
+        slider.set_value(3.25);
+        slider.set_range(-1.0, 20.0);
+        slider.set_digits(3)?;
+        assert!((slider.value() - 3.25).abs() < f32::EPSILON);
+        assert_eq!(slider.range(), (-1.0, 20.0));
+        assert_eq!(slider.digits(), 3);
+        Ok(())
+    });
+}
+
+#[test]
+fn unsigned_scale_supports_numeric_updates() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let scale = curdk::UScale::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "UScale",
+            "Value: ",
+            8,
+            5,
+            0,
+            10,
+            1,
+            2,
+        )?;
+        scale.set_value(7);
+        scale.set_range(2, 20);
+        assert_eq!(scale.value(), 7);
+        assert_eq!(scale.range(), (2, 20));
+        Ok(())
+    });
+}

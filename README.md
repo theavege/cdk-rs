@@ -40,6 +40,144 @@ There is a higher-level and easier-to-use library that brings together numerous 
 Terminal and widget constructors return `Result` values. Applications should handle
 initialization failures and strings containing NUL bytes instead of relying on panics.
 
+## Tutorial
+
+This is the Rust version of the classic CDK workflow: create a curses window,
+attach a CDK screen, add widgets, activate them, and let the owners clean up
+the terminal when they leave scope.
+
+### 1. Install dependencies
+
+On Debian or Ubuntu:
+
+```sh
+sudo apt install cargo clang libcdk5-dev pkg-config
+```
+
+`curdk-sys` uses the CDK5 development installation. If `cdk5-config` is not
+on `PATH`, set `CDK5_CONFIG` to its full path before building.
+
+### 2. Create a screen
+
+`Window` initializes the curses terminal. `Screen` connects that terminal to
+CDK and owns the lifetime required by its widgets:
+
+```rust,ignore
+let window = curdk::Window::new()?;
+let screen = curdk::Screen::new(&window)?;
+# Ok::<(), curdk::Error>(())
+```
+
+Keep the `Window` and `Screen` alive while using widgets. Dropping a widget
+destroys its native CDK object; dropping the screen restores the terminal.
+
+### 3. Add and activate widgets
+
+The constructors accept Rust strings and return an error if CDK rejects the
+native allocation or a string contains an interior NUL byte:
+
+```rust,ignore
+let window = curdk::Window::new()?;
+let screen = curdk::Screen::new(&window)?;
+let label = curdk::Label::new(&screen, curdk::CENTER, curdk::TOP, "Name")?;
+let entry = curdk::Entry::new(&screen, curdk::CENTER, curdk::CENTER, "Input", "Name: ")?;
+
+screen.refresh();
+let value = entry.activate()?;
+label.set_message(&format!("Hello, {value}!"))?;
+screen.refresh();
+# Ok::<(), curdk::Error>(())
+```
+
+Interactive widgets block in `activate` until the user finishes. Buttons,
+button boxes, dialogs, menus, lists, and selections also provide
+`activate_result()`, which returns `Activation::Selected(index)` or
+`Activation::Cancelled` instead of exposing CDK's raw return code.
+
+### 4. Finish the session
+
+Call `screen.exit()` when the application should leave CDK's main loop. The
+normal Rust drop order then releases widgets, the screen, and the terminal.
+
+The repository contains complete examples:
+
+```sh
+cargo run -p curdk --example counter
+cargo run -p curdk --example temperature_converter
+cargo run -p curdk --example crud
+cargo run -p curdk --example flight_booker
+```
+
+### Tutorial, part 2: compose a screen
+
+The second part of the original CDK tutorial demonstrates the important step
+after creating one widget: compose a screen from several focused widgets and
+let each activation produce an application message. In Rust, keep the
+application state separate from CDK handles, and make the event loop the only
+place that changes that state.
+
+```rust,ignore
+enum Message {
+    Search,
+    Select(usize),
+    Quit,
+}
+
+fn update(model: &mut Model, message: Message) {
+    match message {
+        Message::Search => model.refresh_results(),
+        Message::Select(index) => model.selected = index,
+        Message::Quit => model.running = false,
+    }
+}
+```
+
+Create widgets once, then update their contents during each view pass. This
+avoids recreating native objects and keeps ownership predictable:
+
+```rust,ignore
+let results = curdk::Scroll::new(
+    &screen,
+    curdk::CENTER,
+    curdk::CENTER,
+    curdk::RIGHT,
+    8,
+    48,
+    "Results",
+    &["First result", "Second result"],
+    false,
+)?;
+let actions = curdk::Buttonbox::new(
+    &screen,
+    curdk::CENTER,
+    curdk::BOTTOM,
+    5,
+    32,
+    1,
+    2,
+    &["Search", "Quit"],
+)?;
+```
+
+A typical CDK event loop follows this order:
+
+1. Render model state into labels, entries, and lists.
+2. Refresh the screen once.
+3. Activate the widget that owns the next interaction.
+4. Convert its result into a message.
+5. Apply `update` and repeat until the model requests `Quit`.
+
+Use `Widget` when a function only needs common operations such as drawing or
+changing the box. Use widget-specific methods for values, selections, and
+activation. `Scroll`, `Radio`, and `Selection` accept Rust slices, convert
+their strings for the duration of the native call, and expose current-item
+accessors. `Selection` additionally exposes per-item boolean choices.
+
+For a complete application-shaped version of this pattern, see the
+`counter`, `booker`, `crud`, `calculator`, and `temperature_converter`
+examples. This section is adapted from the archived
+[second CDK tutorial](https://web.archive.org/web/20110825004635/http://www.unixgarden.com/index.php/programmation/tutoriel-cdk-partie-2).
+
 ## Other bindings for CDK
 
 - [Ruby](https://github.com/movitto/cdk)
