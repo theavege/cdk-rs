@@ -37,6 +37,15 @@ pub trait Widget {
     fn draw(&self);
 }
 
+pub trait NumericWidget {
+    type Value: Copy;
+
+    fn value(&self) -> Self::Value;
+    fn set_value(&self, value: Self::Value);
+    fn range(&self) -> (Self::Value, Self::Value);
+    fn set_range(&self, low: Self::Value, high: Self::Value);
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Activation {
     Selected(usize),
@@ -1022,6 +1031,103 @@ impl FSlider {
         Ok(())
     }
 }
+impl_cdk!(USlider, CDKUSLIDER);
+impl USlider {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        title_: &str,
+        label_: &str,
+        field_width: u32,
+        start: u32,
+        low: u32,
+        high: u32,
+        increment: u32,
+        fast_increment: u32,
+    ) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let field_width = checked_c_int(field_width as u64, "field width")?;
+        let title = CString::new(title_)?;
+        let label = CString::new(label_)?;
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKUSlider(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                title.as_ptr(),
+                label.as_ptr(),
+                curdk_sys::A_NORMAL,
+                field_width,
+                start,
+                low,
+                high,
+                increment,
+                fast_increment,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) -> u32 {
+        unsafe { activateCDKUSlider(self.as_raw(), std::ptr::null_mut()) }
+    }
+
+    pub fn value(&self) -> u32 {
+        unsafe { getCDKUSliderValue(self.as_raw()) }
+    }
+
+    pub fn set_value(&self, value: u32) {
+        unsafe { setCDKUSliderValue(self.as_raw(), value) };
+    }
+
+    pub fn range(&self) -> (u32, u32) {
+        unsafe {
+            (
+                getCDKUSliderLowValue(self.as_raw()),
+                getCDKUSliderHighValue(self.as_raw()),
+            )
+        }
+    }
+
+    pub fn set_range(&self, low: u32, high: u32) {
+        unsafe { setCDKUSliderLowHigh(self.as_raw(), low, high) };
+    }
+}
+
+macro_rules! impl_numeric_widget {
+    ($widget:ty, $value:ty) => {
+        impl NumericWidget for $widget {
+            type Value = $value;
+
+            fn value(&self) -> Self::Value {
+                <$widget>::value(self)
+            }
+
+            fn set_value(&self, value: Self::Value) {
+                <$widget>::set_value(self, value);
+            }
+
+            fn range(&self) -> (Self::Value, Self::Value) {
+                <$widget>::range(self)
+            }
+
+            fn set_range(&self, low: Self::Value, high: Self::Value) {
+                <$widget>::set_range(self, low, high);
+            }
+        }
+    };
+}
+
+impl_numeric_widget!(Scale, i32);
+impl_numeric_widget!(Slider, i32);
+impl_numeric_widget!(UScale, u32);
+impl_numeric_widget!(USlider, u32);
+impl_numeric_widget!(FScale, f32);
+impl_numeric_widget!(FSlider, f32);
 impl_cdk!(Graph, CDKGRAPH);
 impl Graph {
     #[allow(clippy::too_many_arguments)]

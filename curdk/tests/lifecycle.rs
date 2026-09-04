@@ -308,3 +308,29 @@ fn unsigned_scale_supports_numeric_updates() {
         Ok(())
     });
 }
+
+#[test]
+fn unsigned_slider_supports_numeric_updates() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let slider = curdk::USlider::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "USlider",
+            "Value: ",
+            8,
+            5,
+            0,
+            10,
+            1,
+            2,
+        )?;
+        slider.set_value(7);
+        slider.set_range(2, 20);
+        assert_eq!(slider.value(), 7);
+        assert_eq!(slider.range(), (2, 20));
+        Ok(())
+    });
+}
