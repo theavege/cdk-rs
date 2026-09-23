@@ -144,6 +144,22 @@ impl CStringArray {
     }
 }
 
+fn one_based_strings(values: &[&str]) -> Result<CStringArray, Error> {
+    let mut prefixed = Vec::with_capacity(values.len() + 1);
+    prefixed.push("");
+    prefixed.extend(values.iter().copied());
+    CStringArray::new(&prefixed)
+}
+
+fn one_based_ints(values: &[u32], name: &'static str) -> Result<Vec<c_int>, Error> {
+    let mut integers = Vec::with_capacity(values.len() + 1);
+    integers.push(0);
+    for value in values {
+        integers.push(checked_c_int(*value as u64, name)?);
+    }
+    Ok(integers)
+}
+
 struct WindowOwner {
     ptr: NonNull<WINDOW>,
     ended: Cell<bool>,
@@ -308,6 +324,67 @@ impl Screen {
 }
 
 impl_cdk!(Alphalist, CDKALPHALIST);
+impl Alphalist {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        height: u32,
+        width: u32,
+        title_: &str,
+        label_: &str,
+        items_: &[&str],
+    ) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let height = checked_c_int(height as u64, "height")?;
+        let width = checked_c_int(width as u64, "width")?;
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let title = CString::new(title_)?;
+        let label = CString::new(label_)?;
+        let mut items = CStringArray::new(items_)?;
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKAlphalist(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                height,
+                width,
+                title.as_ptr(),
+                label.as_ptr(),
+                items.as_mut_ptr(),
+                item_count,
+                ' ' as curdk_sys::chtype,
+                curdk_sys::A_NORMAL,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) -> Result<String, Error> {
+        let value = unsafe { activateCDKAlphalist(self.as_raw(), std::ptr::null_mut()) };
+        unsafe { owned_c_string(value, "Alphalist value") }
+    }
+
+    pub fn current(&self) -> i32 {
+        unsafe { getCDKAlphalistCurrentItem(self.as_raw()) }
+    }
+
+    pub fn set_current(&self, item: u32) -> Result<(), Error> {
+        let item = checked_c_int(item as u64, "item index")?;
+        unsafe { setCDKAlphalistCurrentItem(self.as_raw(), item) };
+        Ok(())
+    }
+
+    pub fn set_items(&self, items_: &[&str]) -> Result<(), Error> {
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let mut items = CStringArray::new(items_)?;
+        unsafe { setCDKAlphalistContents(self.as_raw(), items.as_mut_ptr(), item_count) };
+        Ok(())
+    }
+}
 impl_cdk!(Button, CDKBUTTON);
 impl Button {
     pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, message_: &str) -> Result<Self, Error> {
@@ -557,6 +634,84 @@ impl Dialog {
     }
 }
 impl_cdk!(DScale, CDKDSCALE);
+impl DScale {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        title_: &str,
+        label_: &str,
+        field_width: u32,
+        start: f64,
+        low: f64,
+        high: f64,
+        increment: f64,
+        fast_increment: f64,
+        digits: u32,
+    ) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let field_width = checked_c_int(field_width as u64, "field width")?;
+        let digits = checked_c_int(digits as u64, "digits")?;
+        let title = CString::new(title_)?;
+        let label = CString::new(label_)?;
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKDScale(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                title.as_ptr(),
+                label.as_ptr(),
+                curdk_sys::A_NORMAL,
+                field_width,
+                start,
+                low,
+                high,
+                increment,
+                fast_increment,
+                digits,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) -> f64 {
+        unsafe { activateCDKDScale(self.as_raw(), std::ptr::null_mut()) }
+    }
+
+    pub fn value(&self) -> f64 {
+        unsafe { getCDKDScaleValue(self.as_raw()) }
+    }
+
+    pub fn set_value(&self, value: f64) {
+        unsafe { setCDKDScaleValue(self.as_raw(), value) };
+    }
+
+    pub fn range(&self) -> (f64, f64) {
+        unsafe {
+            (
+                getCDKDScaleLowValue(self.as_raw()),
+                getCDKDScaleHighValue(self.as_raw()),
+            )
+        }
+    }
+
+    pub fn set_range(&self, low: f64, high: f64) {
+        unsafe { setCDKDScaleLowHigh(self.as_raw(), low, high) };
+    }
+
+    pub fn digits(&self) -> i32 {
+        unsafe { getCDKDScaleDigits(self.as_raw()) }
+    }
+
+    pub fn set_digits(&self, digits: u32) -> Result<(), Error> {
+        let digits = checked_c_int(digits as u64, "digits")?;
+        unsafe { setCDKDScaleDigits(self.as_raw(), digits) };
+        Ok(())
+    }
+}
 impl_cdk!(Entry, CDKENTRY);
 impl Entry {
     pub fn new(
@@ -1128,6 +1283,7 @@ impl_numeric_widget!(UScale, u32);
 impl_numeric_widget!(USlider, u32);
 impl_numeric_widget!(FScale, f32);
 impl_numeric_widget!(FSlider, f32);
+impl_numeric_widget!(DScale, f64);
 impl_cdk!(Graph, CDKGRAPH);
 impl Graph {
     #[allow(clippy::too_many_arguments)]
@@ -1161,6 +1317,28 @@ impl Graph {
             )
         })
     }
+
+    pub fn set_values(&self, values: &[i32], start_at_zero: bool) -> Result<(), Error> {
+        let count = checked_c_int(values.len() as u64, "value count")?;
+        let mut values = values.to_vec();
+        let result = unsafe {
+            setCDKGraphValues(
+                self.as_raw(),
+                values.as_mut_ptr(),
+                count,
+                i32::from(start_at_zero),
+            )
+        };
+        if result < 0 {
+            return Err(Error::InvalidActivation(result));
+        }
+        Ok(())
+    }
+
+    pub fn value(&self, index: u32) -> Result<i32, Error> {
+        let index = checked_c_int(index as u64, "index")?;
+        Ok(unsafe { getCDKGraphValue(self.as_raw(), index) })
+    }
 }
 impl_cdk!(Histogram, CDKHISTOGRAM);
 impl Histogram {
@@ -1193,8 +1371,87 @@ impl Histogram {
             )
         })
     }
+
+    pub fn set_value(&self, low: i32, high: i32, value: i32) {
+        unsafe { setCDKHistogramValue(self.as_raw(), low, high, value) };
+    }
+
+    pub fn value(&self) -> i32 {
+        unsafe { getCDKHistogramValue(self.as_raw()) }
+    }
+
+    pub fn range(&self) -> (i32, i32) {
+        unsafe {
+            (
+                getCDKHistogramLowValue(self.as_raw()),
+                getCDKHistogramHighValue(self.as_raw()),
+            )
+        }
+    }
 }
 impl_cdk!(Itemlist, CDKITEMLIST);
+impl Itemlist {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        title_: &str,
+        label_: &str,
+        items_: &[&str],
+        default_item: u32,
+    ) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let default_item = checked_c_int(default_item as u64, "default item")?;
+        let title = CString::new(title_)?;
+        let label = CString::new(label_)?;
+        let mut items = CStringArray::new(items_)?;
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKItemlist(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                title.as_ptr(),
+                label.as_ptr(),
+                items.as_mut_ptr(),
+                item_count,
+                default_item,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) -> i32 {
+        unsafe { activateCDKItemlist(self.as_raw(), std::ptr::null_mut()) }
+    }
+
+    pub fn activate_result(&self) -> Result<Activation, Error> {
+        activation(self.activate())
+    }
+
+    pub fn current(&self) -> i32 {
+        unsafe { getCDKItemlistCurrentItem(self.as_raw()) }
+    }
+
+    pub fn set_current(&self, item: u32) -> Result<(), Error> {
+        let item = checked_c_int(item as u64, "item index")?;
+        unsafe { setCDKItemlistCurrentItem(self.as_raw(), item) };
+        Ok(())
+    }
+
+    pub fn set_items(&self, items_: &[&str], default_item: u32) -> Result<(), Error> {
+        let item_count = checked_c_int(items_.len() as u64, "item count")?;
+        let default_item = checked_c_int(default_item as u64, "default item")?;
+        let mut items = CStringArray::new(items_)?;
+        unsafe {
+            setCDKItemlistValues(self.as_raw(), items.as_mut_ptr(), item_count, default_item)
+        };
+        Ok(())
+    }
+}
 impl_cdk!(Label, CDKLABEL);
 impl Label {
     pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, message_: &str) -> Result<Self, Error> {
@@ -1229,7 +1486,119 @@ impl Label {
     }
 }
 impl_cdk!(Marquee, CDKMARQUEE);
+impl Marquee {
+    pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, width: u32) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let width = checked_c_int(width as u64, "field width")?;
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKMarquee(cdkscreen.as_raw(), xpos, ypos, width, BOX, SHADOW)
+        })
+    }
+
+    pub fn activate(&self, message_: &str, delay: u32, repeat: u32) -> Result<i32, Error> {
+        let message = CString::new(message_)?;
+        let delay = checked_c_int(delay as u64, "delay")?;
+        let repeat = checked_c_int(repeat as u64, "repeat")?;
+        Ok(unsafe { activateCDKMarquee(self.as_raw(), message.as_ptr(), delay, repeat, BOX) })
+    }
+}
 impl_cdk!(Matrix, CDKMATRIX);
+impl Matrix {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        view_rows: u32,
+        view_cols: u32,
+        title_: &str,
+        row_titles_: &[&str],
+        col_titles_: &[&str],
+        col_widths_: &[u32],
+    ) -> Result<Self, Error> {
+        if col_titles_.len() != col_widths_.len() {
+            return Err(Error::LengthMismatch(
+                "matrix column widths",
+                col_titles_.len(),
+                col_widths_.len(),
+            ));
+        }
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let view_rows = checked_c_int(view_rows as u64, "view rows")?;
+        let view_cols = checked_c_int(view_cols as u64, "view columns")?;
+        let actual_rows = checked_c_int(row_titles_.len() as u64, "row count")?;
+        let actual_cols = checked_c_int(col_titles_.len() as u64, "column count")?;
+        let title = CString::new(title_)?;
+        let mut row_titles = one_based_strings(row_titles_)?;
+        let mut col_titles = one_based_strings(col_titles_)?;
+        let mut col_widths = one_based_ints(col_widths_, "column width")?;
+        let mut col_types = vec![0];
+        col_types.extend(std::iter::repeat_n(
+            EDisplayType_vMIXED as c_int,
+            col_titles_.len(),
+        ));
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKMatrix(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                actual_rows,
+                actual_cols,
+                view_rows,
+                view_cols,
+                title.as_ptr(),
+                row_titles.as_mut_ptr(),
+                col_titles.as_mut_ptr(),
+                col_widths.as_mut_ptr(),
+                col_types.as_mut_ptr(),
+                1,
+                1,
+                ' ' as curdk_sys::chtype,
+                ROW as c_int,
+                BOX,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) -> i32 {
+        unsafe { activateCDKMatrix(self.as_raw(), std::ptr::null_mut()) }
+    }
+
+    pub fn activate_result(&self) -> Result<Activation, Error> {
+        activation(self.activate())
+    }
+
+    /// Returns the cell at zero-based `(row, col)`.
+    pub fn cell(&self, row: u32, col: u32) -> Result<String, Error> {
+        let row = checked_c_int(row as u64 + 1, "row")?;
+        let col = checked_c_int(col as u64 + 1, "column")?;
+        let value = unsafe { getCDKMatrixCell(self.as_raw(), row, col) };
+        unsafe { owned_c_string(value, "Matrix cell") }
+    }
+
+    /// Sets the cell at zero-based `(row, col)`.
+    pub fn set_cell(&self, row: u32, col: u32, value_: &str) -> Result<(), Error> {
+        let row = checked_c_int(row as u64 + 1, "row")?;
+        let col = checked_c_int(col as u64 + 1, "column")?;
+        let value = CString::new(value_)?;
+        let result = unsafe { setCDKMatrixCell(self.as_raw(), row, col, value.as_ptr()) };
+        if result < 0 {
+            return Err(Error::InvalidActivation(result));
+        }
+        Ok(())
+    }
+
+    /// Returns the zero-based current cell position.
+    pub fn current(&self) -> (u32, u32) {
+        let row = unsafe { getCDKMatrixRow(self.as_raw()) };
+        let col = unsafe { getCDKMatrixCol(self.as_raw()) };
+        (row.saturating_sub(1) as u32, col.saturating_sub(1) as u32)
+    }
+}
 impl_cdk!(Radio, CDKRADIO);
 impl Radio {
     #[allow(clippy::too_many_arguments)]
@@ -1618,6 +1987,121 @@ impl Slider {
 
     pub fn set_range(&self, low: i32, high: i32) {
         unsafe { setCDKSliderLowHigh(self.as_raw(), low, high) };
+    }
+}
+impl_cdk!(Swindow, CDKSWINDOW);
+impl Swindow {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        height: u32,
+        width: u32,
+        title_: &str,
+        save_lines: u32,
+    ) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let height = checked_c_int(height as u64, "height")?;
+        let width = checked_c_int(width as u64, "width")?;
+        let save_lines = checked_c_int(save_lines as u64, "save lines")?;
+        let title = CString::new(title_)?;
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKSwindow(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                height,
+                width,
+                title.as_ptr(),
+                save_lines,
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) {
+        unsafe { activateCDKSwindow(self.as_raw(), std::ptr::null_mut()) };
+    }
+
+    pub fn add(&self, info_: &str, insert_pos: u32) -> Result<(), Error> {
+        let info = CString::new(info_)?;
+        let insert_pos = checked_c_int(insert_pos as u64, "insert position")?;
+        unsafe { addCDKSwindow(self.as_raw(), info.as_ptr(), insert_pos) };
+        Ok(())
+    }
+
+    pub fn set_contents(&self, lines_: &[&str]) -> Result<(), Error> {
+        let line_count = checked_c_int(lines_.len() as u64, "line count")?;
+        let mut lines = CStringArray::new(lines_)?;
+        unsafe { setCDKSwindowContents(self.as_raw(), lines.as_mut_ptr(), line_count) };
+        Ok(())
+    }
+
+    pub fn jump_to_line(&self, line: u32) -> Result<(), Error> {
+        let line = checked_c_int(line as u64, "line")?;
+        unsafe { jumpToLineCDKSwindow(self.as_raw(), line) };
+        Ok(())
+    }
+
+    pub fn clear(&self) {
+        unsafe { cleanCDKSwindow(self.as_raw()) };
+    }
+}
+impl_cdk!(Template, CDKTEMPLATE);
+impl Template {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        title_: &str,
+        label_: &str,
+        plate_: &str,
+        overlay_: &str,
+    ) -> Result<Self, Error> {
+        let xpos = checked_c_int(xpos as u64, "x position")?;
+        let ypos = checked_c_int(ypos as u64, "y position")?;
+        let title = CString::new(title_)?;
+        let label = CString::new(label_)?;
+        let plate = CString::new(plate_)?;
+        let overlay = CString::new(overlay_)?;
+        Self::from_raw(cdkscreen, unsafe {
+            newCDKTemplate(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                title.as_ptr(),
+                label.as_ptr(),
+                plate.as_ptr(),
+                overlay.as_ptr(),
+                BOX,
+                SHADOW,
+            )
+        })
+    }
+
+    pub fn activate(&self) -> Result<String, Error> {
+        let value = unsafe { activateCDKTemplate(self.as_raw(), std::ptr::null_mut()) };
+        unsafe { owned_c_string(value, "Template value") }
+    }
+
+    pub fn value(&self) -> Result<String, Error> {
+        let value = unsafe { getCDKTemplateValue(self.as_raw()) };
+        unsafe { owned_c_string(value, "Template value") }
+    }
+
+    pub fn set_value(&self, value_: &str) -> Result<(), Error> {
+        let value = CString::new(value_)?;
+        unsafe { setCDKTemplateValue(self.as_raw(), value.as_ptr()) };
+        Ok(())
+    }
+
+    pub fn mix(&self) -> Result<String, Error> {
+        let value = unsafe { mixCDKTemplate(self.as_raw()) };
+        unsafe { owned_c_string(value, "Template mix") }
     }
 }
 
