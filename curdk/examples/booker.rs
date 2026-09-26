@@ -101,8 +101,22 @@ fn view(
 fn main() -> Result<(), curdk::Error> {
     let window = curdk::Window::new()?;
     let screen = curdk::Screen::new(&window)?;
-    let title = curdk::Entry::new(&screen, curdk::CENTER, 2, "Title", "Title: ")?;
-    let author = curdk::Entry::new(&screen, curdk::CENTER, 6, "Author", "Author: ")?;
+    let title = curdk::Entry::new(
+        &screen,
+        curdk::CENTER,
+        2,
+        "Title",
+        "Title: ",
+        curdk::Border::NONE,
+    )?;
+    let author = curdk::Entry::new(
+        &screen,
+        curdk::CENTER,
+        6,
+        "Author",
+        "Author: ",
+        curdk::Border::NONE,
+    )?;
     let initial_items: Vec<&str> = BOOKS.iter().map(|book| book.title).collect();
     let results = curdk::Selection::new(
         &screen,
@@ -115,6 +129,7 @@ fn main() -> Result<(), curdk::Error> {
         &initial_items,
         &["[ ]", "[X]"],
         &vec![false; initial_items.len()],
+        curdk::Border::NONE,
     )?;
     let controls = curdk::Buttonbox::new(
         &screen,
@@ -125,6 +140,7 @@ fn main() -> Result<(), curdk::Error> {
         1,
         4,
         &["Search", "Previous", "Next", "Quit"],
+        curdk::Border::NONE,
     )?;
     let mut model = Model {
         title_query: String::new(),

@@ -115,8 +115,22 @@ fn view(
 fn main() -> Result<(), curdk::Error> {
     let window = curdk::Window::new()?;
     let screen = curdk::Screen::new(&window)?;
-    let name = curdk::Entry::new(&screen, curdk::CENTER, 2, "Name", "Name: ")?;
-    let email = curdk::Entry::new(&screen, curdk::CENTER, 6, "Email", "Email: ")?;
+    let name = curdk::Entry::new(
+        &screen,
+        curdk::CENTER,
+        2,
+        "Name",
+        "Name: ",
+        curdk::Border::NONE,
+    )?;
+    let email = curdk::Entry::new(
+        &screen,
+        curdk::CENTER,
+        6,
+        "Email",
+        "Email: ",
+        curdk::Border::NONE,
+    )?;
     let results = curdk::Selection::new(
         &screen,
         curdk::CENTER,
@@ -128,6 +142,7 @@ fn main() -> Result<(), curdk::Error> {
         &["Ada Lovelace - ada@example.com"],
         &["[ ]", "[X]"],
         &[false],
+        curdk::Border::NONE,
     )?;
     let controls = curdk::Buttonbox::new(
         &screen,
@@ -138,6 +153,7 @@ fn main() -> Result<(), curdk::Error> {
         1,
         5,
         &["Search", "Create", "Update", "Delete", "Quit"],
+        curdk::Border::NONE,
     )?;
     let contacts = vec![Contact {
         name: "Ada Lovelace".into(),

@@ -7,10 +7,24 @@ fn main() -> Result<(), curdk::Error> {
         curdk::CENTER,
         curdk::TOP,
         "</B/24>Enter a value<!B!24>",
+        curdk::Border::NONE,
     )?;
-    let entry = curdk::Entry::new(&scr, curdk::CENTER, curdk::CENTER, "Value", "Input: ")?;
+    let entry = curdk::Entry::new(
+        &scr,
+        curdk::CENTER,
+        curdk::CENTER,
+        "Value",
+        "Input: ",
+        curdk::Border::NONE,
+    )?;
     entry.set_value("initial")?;
-    let btn = curdk::Button::new(&scr, curdk::CENTER, curdk::BOTTOM, "Button")?;
+    let btn = curdk::Button::new(
+        &scr,
+        curdk::CENTER,
+        curdk::BOTTOM,
+        "Button",
+        curdk::Border::NONE,
+    )?;
     scr.refresh();
     let value = entry.activate()?;
     lbl.set_message(&format!("</B/24>{value}<!B!24>"))?;

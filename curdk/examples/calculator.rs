@@ -61,9 +61,29 @@ fn view(
 fn main() -> Result<(), curdk::Error> {
     let window = curdk::Window::new()?;
     let screen = curdk::Screen::new(&window)?;
-    let first = curdk::Entry::new(&screen, curdk::CENTER, 4, "First", "A: ")?;
-    let second = curdk::Entry::new(&screen, curdk::CENTER, 8, "Second", "B: ")?;
-    let result = curdk::Label::new(&screen, curdk::CENTER, 12, "Result: 0.00")?;
+    let first = curdk::Entry::new(
+        &screen,
+        curdk::CENTER,
+        4,
+        "First",
+        "A: ",
+        curdk::Border::NONE,
+    )?;
+    let second = curdk::Entry::new(
+        &screen,
+        curdk::CENTER,
+        8,
+        "Second",
+        "B: ",
+        curdk::Border::NONE,
+    )?;
+    let result = curdk::Label::new(
+        &screen,
+        curdk::CENTER,
+        12,
+        "Result: 0.00",
+        curdk::Border::NONE,
+    )?;
     let controls = curdk::Buttonbox::new(
         &screen,
         curdk::CENTER,
@@ -73,6 +93,7 @@ fn main() -> Result<(), curdk::Error> {
         1,
         5,
         &["+", "-", "*", "/", "Quit"],
+        curdk::Border::NONE,
     )?;
     let mut model = Model {
         first: "0".into(),

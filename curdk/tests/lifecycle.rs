@@ -52,7 +52,13 @@ fn widgets_drop_before_their_screen() {
     run_in_terminal(|| {
         let window = curdk::Window::new()?;
         let screen = curdk::Screen::new(&window)?;
-        let _label = curdk::Label::new(&screen, curdk::CENTER, curdk::TOP, "label")?;
+        let _label = curdk::Label::new(
+            &screen,
+            curdk::CENTER,
+            curdk::TOP,
+            "label",
+            curdk::Border::NONE,
+        )?;
         Ok(())
     });
 }
@@ -63,7 +69,13 @@ fn widget_keeps_screen_alive() {
         let window = curdk::Window::new()?;
         let label = {
             let screen = curdk::Screen::new(&window)?;
-            curdk::Label::new(&screen, curdk::CENTER, curdk::TOP, "label")?
+            curdk::Label::new(
+                &screen,
+                curdk::CENTER,
+                curdk::TOP,
+                "label",
+                curdk::Border::NONE,
+            )?
         };
         label.set_box(false);
         Ok(())
@@ -85,6 +97,7 @@ fn scroll_supports_items_and_selection() {
             "Items",
             &["First", "Second"],
             false,
+            curdk::Border::NONE,
         )?;
         scroll.set_items(&["Updated"], false)?;
         scroll.set_current(0)?;
@@ -109,6 +122,7 @@ fn radio_supports_items_and_selection() {
             &["First", "Second"],
             '*',
             0,
+            curdk::Border::NONE,
         )?;
         radio.set_items(&["Updated", "Another"])?;
         radio.set_current(1)?;
@@ -133,6 +147,7 @@ fn selection_supports_multiple_choices() {
             &["First", "Second"],
             &["[ ]", "[X]"],
             &[true, false],
+            curdk::Border::NONE,
         )?;
         selection.set_current(1)?;
         selection.set_choice(1, true)?;
@@ -165,8 +180,16 @@ fn calendar_supports_date_updates() {
     run_in_terminal(|| {
         let window = curdk::Window::new()?;
         let screen = curdk::Screen::new(&window)?;
-        let calendar =
-            curdk::Calendar::new(&screen, curdk::CENTER, curdk::CENTER, "Date", 4, 7, 2026)?;
+        let calendar = curdk::Calendar::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "Date",
+            4,
+            7,
+            2026,
+            curdk::Border::NONE,
+        )?;
         calendar.set_date(15, 8, 2027)?;
         assert_eq!(calendar.date(), (15, 8, 2027));
         Ok(())
@@ -190,6 +213,7 @@ fn scale_supports_numeric_updates() {
             10,
             1,
             2,
+            curdk::Border::NONE,
         )?;
         scale.set_value(7);
         scale.set_range(-5, 20);
@@ -216,6 +240,7 @@ fn slider_supports_numeric_updates() {
             10,
             1,
             2,
+            curdk::Border::NONE,
         )?;
         slider.set_value(7);
         slider.set_range(-5, 20);
@@ -243,6 +268,7 @@ fn floating_scale_supports_numeric_updates() {
             0.5,
             1.0,
             2,
+            curdk::Border::NONE,
         )?;
         scale.set_value(3.25);
         scale.set_range(-1.0, 20.0);
@@ -272,6 +298,7 @@ fn floating_slider_supports_numeric_updates() {
             0.5,
             1.0,
             2,
+            curdk::Border::NONE,
         )?;
         slider.set_value(3.25);
         slider.set_range(-1.0, 20.0);
@@ -300,6 +327,7 @@ fn unsigned_scale_supports_numeric_updates() {
             10,
             1,
             2,
+            curdk::Border::NONE,
         )?;
         scale.set_value(7);
         scale.set_range(2, 20);
@@ -326,6 +354,7 @@ fn unsigned_slider_supports_numeric_updates() {
             10,
             1,
             2,
+            curdk::Border::NONE,
         )?;
         slider.set_value(7);
         slider.set_range(2, 20);
@@ -349,6 +378,7 @@ fn alphalist_supports_items_and_selection() {
             "Cities",
             "City: ",
             &["Helsinki", "Joensuu", "Turku"],
+            curdk::Border::NONE,
         )?;
         alphalist.set_items(&["Joensuu", "Tampere"])?;
         alphalist.set_current(1)?;
@@ -370,6 +400,7 @@ fn itemlist_supports_items_and_selection() {
             "Weekday: ",
             &["Mon", "Tue", "Wed"],
             0,
+            curdk::Border::NONE,
         )?;
         itemlist.set_items(&["Thu", "Fri"], 1)?;
         itemlist.set_current(1)?;
@@ -396,6 +427,7 @@ fn double_scale_supports_numeric_updates() {
             0.5,
             1.0,
             2,
+            curdk::Border::NONE,
         )?;
         scale.set_value(3.25);
         scale.set_range(-1.0, 20.0);
@@ -412,7 +444,13 @@ fn marquee_can_be_created() {
     run_in_terminal(|| {
         let window = curdk::Window::new()?;
         let screen = curdk::Screen::new(&window)?;
-        let _marquee = curdk::Marquee::new(&screen, curdk::CENTER, curdk::CENTER, 24)?;
+        let _marquee = curdk::Marquee::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            24,
+            curdk::Border::NONE,
+        )?;
         Ok(())
     });
 }
@@ -432,6 +470,7 @@ fn matrix_supports_cell_updates() {
             &["R1", "R2"],
             &["C1", "C2"],
             &[8, 8],
+            curdk::Border::NONE,
         )?;
         matrix.set_cell(0, 1, "hello")?;
         assert_eq!(matrix.cell(0, 1)?, "hello");
@@ -444,7 +483,16 @@ fn swindow_supports_contents() {
     run_in_terminal(|| {
         let window = curdk::Window::new()?;
         let screen = curdk::Screen::new(&window)?;
-        let swindow = curdk::Swindow::new(&screen, curdk::CENTER, curdk::CENTER, 8, 32, "Log", 32)?;
+        let swindow = curdk::Swindow::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            8,
+            32,
+            "Log",
+            32,
+            curdk::Border::NONE,
+        )?;
         swindow.set_contents(&["one", "two"])?;
         swindow.add("three", curdk::BOTTOM)?;
         swindow.jump_to_line(0)?;
@@ -466,6 +514,7 @@ fn template_supports_value_updates() {
             "ISO: ",
             "####/##/##",
             "yyyy/mm/dd",
+            curdk::Border::NONE,
         )?;
         template.set_value("20260923")?;
         assert!(template.value()?.contains("2026"));
@@ -499,11 +548,90 @@ fn histogram_supports_values() {
     run_in_terminal(|| {
         let window = curdk::Window::new()?;
         let screen = curdk::Screen::new(&window)?;
-        let histogram =
-            curdk::Histogram::new(&screen, curdk::CENTER, curdk::CENTER, 3, 20, 1, "Usage")?;
+        let histogram = curdk::Histogram::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            3,
+            20,
+            1,
+            "Usage",
+            curdk::Border::NONE,
+        )?;
         histogram.set_value(0, 100, 40);
         assert_eq!(histogram.value(), 40);
         assert_eq!(histogram.range(), (0, 100));
+        Ok(())
+    });
+}
+
+#[test]
+fn boxed_label_reports_its_border() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let plain = curdk::Label::new(
+            &screen,
+            curdk::CENTER,
+            curdk::TOP,
+            "plain",
+            curdk::Border::NONE,
+        )?;
+        let boxed = curdk::Label::new(
+            &screen,
+            curdk::CENTER,
+            curdk::BOTTOM,
+            "boxed",
+            curdk::Border::BOXED,
+        )?;
+        assert!(!plain.bx());
+        assert!(boxed.bx());
+        boxed.set_box(false);
+        assert!(!boxed.bx());
+        Ok(())
+    });
+}
+
+#[test]
+fn widget_key_binding_can_be_registered() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let entry = curdk::Entry::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "Name",
+            "Name: ",
+            curdk::Border::NONE,
+        )?;
+        let key = b'q' as u32;
+        assert!(!entry.has_binding(key)?);
+        entry.bind_key(key, |_| 1)?;
+        assert!(entry.has_binding(key)?);
+        entry.unbind_key(key)?;
+        assert!(!entry.has_binding(key)?);
+        Ok(())
+    });
+}
+
+#[test]
+fn widget_preprocess_can_be_installed() {
+    run_in_terminal(|| {
+        let window = curdk::Window::new()?;
+        let screen = curdk::Screen::new(&window)?;
+        let entry = curdk::Entry::new(
+            &screen,
+            curdk::CENTER,
+            curdk::CENTER,
+            "Name",
+            "Name: ",
+            curdk::Border::NONE,
+        )?;
+        entry.set_preprocess(|_| 1);
+        entry.set_postprocess(|_| 1);
+        entry.clear_preprocess();
+        entry.clear_postprocess();
         Ok(())
     });
 }

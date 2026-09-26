@@ -61,9 +61,25 @@ fn main() -> Result<(), curdk::Error> {
         "Open file",
         "Path: ",
         ".",
+        curdk::Border::NONE,
     )?;
-    let editor = curdk::Mentry::new(&screen, curdk::CENTER, 2, "Editor", "Text: ", 64, 10)?;
-    let status = curdk::Label::new(&screen, curdk::CENTER, curdk::TOP, "No file selected")?;
+    let editor = curdk::Mentry::new(
+        &screen,
+        curdk::CENTER,
+        2,
+        "Editor",
+        "Text: ",
+        64,
+        10,
+        curdk::Border::NONE,
+    )?;
+    let status = curdk::Label::new(
+        &screen,
+        curdk::CENTER,
+        curdk::TOP,
+        "No file selected",
+        curdk::Border::NONE,
+    )?;
     let controls = curdk::Buttonbox::new(
         &screen,
         curdk::CENTER,
@@ -73,6 +89,7 @@ fn main() -> Result<(), curdk::Error> {
         1,
         3,
         &["Open", "Save", "Quit"],
+        curdk::Border::NONE,
     )?;
     let mut model = Model {
         path: None,

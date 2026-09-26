@@ -8,7 +8,7 @@ initialization can fail:
 ```no_run
 let window = curdk::Window::new()?;
 let screen = curdk::Screen::new(&window)?;
-let entry = curdk::Entry::new(&screen, curdk::CENTER, curdk::CENTER, "Name", "Input: ")?;
+let entry = curdk::Entry::new(&screen, curdk::CENTER, curdk::CENTER, "Name", "Input: ", curdk::Border::NONE)?;
 entry.set_value("initial")?;
 screen.refresh();
 # Ok::<(), curdk::Error>(())
@@ -18,9 +18,10 @@ screen.refresh();
 use {
     curdk_sys::*,
     std::{
-        cell::Cell,
+        cell::{Cell, RefCell},
+        collections::HashMap,
         error::Error as StdError,
-        ffi::{CStr, CString, NulError, c_char, c_int},
+        ffi::{CStr, CString, NulError, c_char, c_int, c_void},
         ptr::NonNull,
         rc::Rc,
         str::Utf8Error,
@@ -28,8 +29,39 @@ use {
 };
 
 pub use curdk_sys::{BOTTOM, CENTER, LEFT, RIGHT, TOP};
-const SHADOW: i32 = false as i32;
-const BOX: i32 = false as i32;
+
+/// Box and drop-shadow flags passed to CDK widget constructors.
+///
+/// `NONE` is an unframed widget, `BOXED` draws a border, and `SHADOWED`
+/// adds a drop shadow. Graph, Menu, Window, and Screen do not take a border.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Border {
+    pub boxed: bool,
+    pub shadow: bool,
+}
+
+impl Border {
+    pub const NONE: Self = Self {
+        boxed: false,
+        shadow: false,
+    };
+    pub const BOXED: Self = Self {
+        boxed: true,
+        shadow: false,
+    };
+    pub const SHADOWED: Self = Self {
+        boxed: true,
+        shadow: true,
+    };
+
+    fn boxed_flag(self) -> c_int {
+        self.boxed as c_int
+    }
+
+    fn shadow_flag(self) -> c_int {
+        self.shadow as c_int
+    }
+}
 
 pub trait Widget {
     fn set_box(&self, bx: bool);
@@ -160,6 +192,30 @@ fn one_based_ints(values: &[u32], name: &'static str) -> Result<Vec<c_int>, Erro
     Ok(integers)
 }
 
+struct CallbackSlot {
+    handler: Box<dyn FnMut(u32) -> i32>,
+}
+
+#[derive(Default)]
+struct WidgetCallbacks {
+    keys: HashMap<u32, Box<CallbackSlot>>,
+    pre: Option<Box<CallbackSlot>>,
+    post: Option<Box<CallbackSlot>>,
+}
+
+unsafe extern "C" fn callback_trampoline(
+    _ty: EObjectType,
+    _object: *mut c_void,
+    data: *mut c_void,
+    input: chtype,
+) -> c_int {
+    if data.is_null() {
+        return 0;
+    }
+    let slot = unsafe { &mut *(data as *mut CallbackSlot) };
+    (slot.handler)(input)
+}
+
 struct WindowOwner {
     ptr: NonNull<WINDOW>,
     ended: Cell<bool>,
@@ -193,19 +249,114 @@ macro_rules! impl_object {
         pub struct $name {
             ptr: NonNull<$ptr>,
             _screen: Rc<ScreenOwner>,
+            callbacks: RefCell<WidgetCallbacks>,
         }
 
         impl $name {
+            const OBJECT_TYPE: EObjectType = paste::paste! { [<EObjectType_v $name:upper>] };
+
             #[allow(dead_code)]
             fn from_raw(screen: &Screen, ptr: *mut $ptr) -> Result<Self, Error> {
                 Ok(Self {
                     ptr: NonNull::new(ptr).ok_or(Error::NullHandle(stringify!($name)))?,
                     _screen: Rc::clone(&screen.owner),
+                    callbacks: RefCell::new(WidgetCallbacks::default()),
                 })
             }
 
             fn as_raw(&self) -> *mut $ptr {
                 self.ptr.as_ptr()
+            }
+
+            fn as_obj(&self) -> *mut CDKOBJS {
+                unsafe { std::ptr::addr_of_mut!((*self.as_raw()).obj) }
+            }
+
+            fn as_void(&self) -> *mut c_void {
+                self.as_raw() as *mut c_void
+            }
+
+            /// Bind `key` to a Rust callback. Return `1` from the callback to consume the key.
+            pub fn bind_key<F>(&self, key: u32, handler: F) -> Result<(), Error>
+            where
+                F: FnMut(u32) -> i32 + 'static,
+            {
+                let key_code = checked_c_int(key as u64, "key")?;
+                self.unbind_key(key)?;
+                let mut slot = Box::new(CallbackSlot {
+                    handler: Box::new(handler),
+                });
+                let data = slot.as_mut() as *mut CallbackSlot as *mut c_void;
+                self.callbacks.borrow_mut().keys.insert(key, slot);
+                unsafe {
+                    bindCDKObject(
+                        Self::OBJECT_TYPE,
+                        self.as_void(),
+                        key_code as chtype,
+                        Some(callback_trampoline),
+                        data,
+                    );
+                }
+                Ok(())
+            }
+
+            pub fn unbind_key(&self, key: u32) -> Result<(), Error> {
+                let key_code = checked_c_int(key as u64, "key")?;
+                unsafe {
+                    unbindCDKObject(Self::OBJECT_TYPE, self.as_void(), key_code as chtype);
+                }
+                self.callbacks.borrow_mut().keys.remove(&key);
+                Ok(())
+            }
+
+            pub fn has_binding(&self, key: u32) -> Result<bool, Error> {
+                let key_code = checked_c_int(key as u64, "key")?;
+                Ok(
+                    unsafe {
+                        isCDKObjectBind(Self::OBJECT_TYPE, self.as_void(), key_code as chtype)
+                    } as c_int
+                        != 0,
+                )
+            }
+
+            /// Called before CDK applies a key. Return `1` to continue, `0` to ignore it.
+            pub fn set_preprocess<F>(&self, handler: F)
+            where
+                F: FnMut(u32) -> i32 + 'static,
+            {
+                let mut slot = Box::new(CallbackSlot {
+                    handler: Box::new(handler),
+                });
+                let data = slot.as_mut() as *mut CallbackSlot as *mut c_void;
+                self.callbacks.borrow_mut().pre = Some(slot);
+                unsafe {
+                    setCDKObjectPreProcess(self.as_obj(), Some(callback_trampoline), data);
+                }
+            }
+
+            pub fn clear_preprocess(&self) {
+                unsafe { setCDKObjectPreProcess(self.as_obj(), None, std::ptr::null_mut()) };
+                self.callbacks.borrow_mut().pre = None;
+            }
+
+            /// Called after CDK applies a key. Return `1` to continue, `0` to stop.
+            pub fn set_postprocess<F>(&self, handler: F)
+            where
+                F: FnMut(u32) -> i32 + 'static,
+            {
+                let mut slot = Box::new(CallbackSlot {
+                    handler: Box::new(handler),
+                });
+                let data = slot.as_mut() as *mut CallbackSlot as *mut c_void;
+                self.callbacks.borrow_mut().post = Some(slot);
+                unsafe {
+                    setCDKObjectPostProcess(self.as_obj(), Some(callback_trampoline), data);
+                }
+            }
+
+            pub fn clear_postprocess(&self) {
+                unsafe { setCDKObjectPostProcess(self.as_obj(), None, std::ptr::null_mut()) };
+                self.callbacks.borrow_mut().post = None;
             }
         }
 
@@ -276,6 +427,7 @@ impl Window {
     }
 }
 
+#[derive(Clone)]
 pub struct Screen {
     owner: Rc<ScreenOwner>,
 }
@@ -316,6 +468,41 @@ impl Screen {
             exitOKCDKScreen(self.as_raw());
         }
     }
+    pub fn cancel(&self) {
+        unsafe {
+            exitCancelCDKScreen(self.as_raw());
+        }
+    }
+    /// Tab between focusable widgets until `exit` or `cancel`.
+    ///
+    /// Returns `true` when the screen exited OK. Bind a key that calls
+    /// [`Screen::exit`] or [`Screen::cancel`] so the loop can finish:
+    ///
+    /// ```no_run
+    /// # fn main() -> Result<(), curdk::Error> {
+    /// let window = curdk::Window::new()?;
+    /// let screen = curdk::Screen::new(&window)?;
+    /// let entry = curdk::Entry::new(
+    ///     &screen,
+    ///     curdk::CENTER,
+    ///     curdk::CENTER,
+    ///     "Name",
+    ///     "Name: ",
+    ///     curdk::Border::BOXED,
+    /// )?;
+    /// let done = screen.clone();
+    /// entry.bind_key(b'x' as u32 & 0x1f, move |_| {
+    ///     done.exit();
+    ///     1
+    /// })?;
+    /// let accepted = screen.traverse();
+    /// # let _ = accepted;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn traverse(&self) -> bool {
+        unsafe { traverseCDKScreen(self.as_raw()) != 0 }
+    }
     pub fn reset(&self) {
         unsafe {
             resetCDKScreen(self.as_raw());
@@ -335,6 +522,7 @@ impl Alphalist {
         title_: &str,
         label_: &str,
         items_: &[&str],
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -357,8 +545,8 @@ impl Alphalist {
                 item_count,
                 ' ' as curdk_sys::chtype,
                 curdk_sys::A_NORMAL,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -387,7 +575,13 @@ impl Alphalist {
 }
 impl_cdk!(Button, CDKBUTTON);
 impl Button {
-    pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, message_: &str) -> Result<Self, Error> {
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        message_: &str,
+        border: Border,
+    ) -> Result<Self, Error> {
         let message = CString::new(message_)?;
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -398,8 +592,8 @@ impl Button {
                 ypos,
                 message.as_ptr(),
                 None,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -422,6 +616,7 @@ impl Buttonbox {
         rows: u32,
         cols: u32,
         buttons_: &[&str],
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -444,8 +639,8 @@ impl Buttonbox {
                 buttons.as_mut_ptr(),
                 button_count,
                 curdk_sys::A_NORMAL,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -460,6 +655,7 @@ impl Buttonbox {
 }
 impl_cdk!(Calendar, CDKCALENDAR);
 impl Calendar {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cdkscreen: &Screen,
         xpos: u32,
@@ -468,6 +664,7 @@ impl Calendar {
         day: u32,
         month: u32,
         year: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -488,8 +685,8 @@ impl Calendar {
                 curdk_sys::A_NORMAL,
                 curdk_sys::A_NORMAL,
                 curdk_sys::A_NORMAL,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -594,6 +791,7 @@ impl Dialog {
         message_: &str,
         rows: u32,
         buttons_: &[&str],
+        border: Border,
     ) -> Result<Self, Error> {
         let message = CString::new(message_)?;
         let xpos = checked_c_int(xpos as u64, "x position")?;
@@ -620,8 +818,8 @@ impl Dialog {
                 button_count,
                 curdk_sys::A_NORMAL,
                 0,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -649,6 +847,7 @@ impl DScale {
         increment: f64,
         fast_increment: f64,
         digits: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -671,8 +870,8 @@ impl DScale {
                 increment,
                 fast_increment,
                 digits,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -720,6 +919,7 @@ impl Entry {
         ypos: u32,
         title_: &str,
         label_: &str,
+        border: Border,
     ) -> Result<Self, Error> {
         let title = CString::new(title_)?;
         let label = CString::new(label_)?;
@@ -739,8 +939,8 @@ impl Entry {
                 0,
                 label_length,
                 label_length,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -785,6 +985,7 @@ impl Fselect {
         title_: &str,
         label_: &str,
         directory_: &str,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -808,8 +1009,8 @@ impl Fselect {
                 c"<F>".as_ptr(),
                 c"<L>".as_ptr(),
                 c"<S>".as_ptr(),
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
         .and_then(|fselect| {
@@ -846,6 +1047,7 @@ impl Viewer {
         height: u32,
         width: u32,
         buttons_: &[&str],
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -870,8 +1072,8 @@ impl Viewer {
                 buttons.as_mut_ptr(),
                 button_count,
                 curdk_sys::A_NORMAL,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -900,7 +1102,7 @@ impl Viewer {
                 curdk_sys::A_NORMAL,
                 0,
                 1,
-                BOX,
+                self.bx() as i32,
             )
         };
         if result < 0 {
@@ -911,6 +1113,7 @@ impl Viewer {
 }
 impl_cdk!(Mentry, CDKMENTRY);
 impl Mentry {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cdkscreen: &Screen,
         xpos: u32,
@@ -919,6 +1122,7 @@ impl Mentry {
         label_: &str,
         width: u32,
         rows: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -940,8 +1144,8 @@ impl Mentry {
                 rows,
                 rows,
                 0,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -978,6 +1182,7 @@ impl FScale {
         increment: f32,
         fast_increment: f32,
         digits: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1000,8 +1205,8 @@ impl FScale {
                 increment,
                 fast_increment,
                 digits,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1056,6 +1261,7 @@ impl UScale {
         high: u32,
         increment: u32,
         fast_increment: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1076,8 +1282,8 @@ impl UScale {
                 high,
                 increment,
                 fast_increment,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1123,6 +1329,7 @@ impl FSlider {
         increment: f32,
         fast_increment: f32,
         digits: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1145,8 +1352,8 @@ impl FSlider {
                 increment,
                 fast_increment,
                 digits,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1201,6 +1408,7 @@ impl USlider {
         high: u32,
         increment: u32,
         fast_increment: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1221,8 +1429,8 @@ impl USlider {
                 high,
                 increment,
                 fast_increment,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1342,6 +1550,7 @@ impl Graph {
 }
 impl_cdk!(Histogram, CDKHISTOGRAM);
 impl Histogram {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cdkscreen: &Screen,
         xpos: u32,
@@ -1350,6 +1559,7 @@ impl Histogram {
         width: u32,
         orient: u32,
         title_: &str,
+        border: Border,
     ) -> Result<Self, Error> {
         let title = CString::new(title_)?;
         let xpos = checked_c_int(xpos as u64, "x position")?;
@@ -1366,8 +1576,8 @@ impl Histogram {
                 width,
                 orient,
                 title.as_ptr(),
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1400,6 +1610,7 @@ impl Itemlist {
         label_: &str,
         items_: &[&str],
         default_item: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1418,8 +1629,8 @@ impl Itemlist {
                 items.as_mut_ptr(),
                 item_count,
                 default_item,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1454,7 +1665,13 @@ impl Itemlist {
 }
 impl_cdk!(Label, CDKLABEL);
 impl Label {
-    pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, message_: &str) -> Result<Self, Error> {
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        message_: &str,
+        border: Border,
+    ) -> Result<Self, Error> {
         let message = CString::new(message_)?;
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1466,8 +1683,8 @@ impl Label {
                 ypos,
                 &mut message_ptr,
                 1,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1487,12 +1704,25 @@ impl Label {
 }
 impl_cdk!(Marquee, CDKMARQUEE);
 impl Marquee {
-    pub fn new(cdkscreen: &Screen, xpos: u32, ypos: u32, width: u32) -> Result<Self, Error> {
+    pub fn new(
+        cdkscreen: &Screen,
+        xpos: u32,
+        ypos: u32,
+        width: u32,
+        border: Border,
+    ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
         let width = checked_c_int(width as u64, "field width")?;
         Self::from_raw(cdkscreen, unsafe {
-            newCDKMarquee(cdkscreen.as_raw(), xpos, ypos, width, BOX, SHADOW)
+            newCDKMarquee(
+                cdkscreen.as_raw(),
+                xpos,
+                ypos,
+                width,
+                border.boxed_flag(),
+                border.shadow_flag(),
+            )
         })
     }
 
@@ -1500,7 +1730,15 @@ impl Marquee {
         let message = CString::new(message_)?;
         let delay = checked_c_int(delay as u64, "delay")?;
         let repeat = checked_c_int(repeat as u64, "repeat")?;
-        Ok(unsafe { activateCDKMarquee(self.as_raw(), message.as_ptr(), delay, repeat, BOX) })
+        Ok(unsafe {
+            activateCDKMarquee(
+                self.as_raw(),
+                message.as_ptr(),
+                delay,
+                repeat,
+                self.bx() as i32,
+            )
+        })
     }
 }
 impl_cdk!(Matrix, CDKMATRIX);
@@ -1516,6 +1754,7 @@ impl Matrix {
         row_titles_: &[&str],
         col_titles_: &[&str],
         col_widths_: &[u32],
+        border: Border,
     ) -> Result<Self, Error> {
         if col_titles_.len() != col_widths_.len() {
             return Err(Error::LengthMismatch(
@@ -1557,9 +1796,9 @@ impl Matrix {
                 1,
                 ' ' as curdk_sys::chtype,
                 ROW as c_int,
-                BOX,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1613,6 +1852,7 @@ impl Radio {
         items_: &[&str],
         choice_char: char,
         default_item: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1637,8 +1877,8 @@ impl Radio {
                 choice_char as curdk_sys::chtype,
                 default_item,
                 curdk_sys::A_NORMAL,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1683,6 +1923,7 @@ impl Scale {
         high: i32,
         increment: i32,
         fast_increment: i32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1703,8 +1944,8 @@ impl Scale {
                 high,
                 increment,
                 fast_increment,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1747,6 +1988,7 @@ impl Scroll {
         title_: &str,
         items_: &[&str],
         numbers: bool,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1769,8 +2011,8 @@ impl Scroll {
                 item_count,
                 numbers as i32,
                 curdk_sys::A_NORMAL,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -1821,6 +2063,7 @@ impl Selection {
         items_: &[&str],
         choice_markers_: &[&str],
         selections_: &[bool],
+        border: Border,
     ) -> Result<Self, Error> {
         if items_.len() != selections_.len() {
             return Err(Error::LengthMismatch(
@@ -1871,8 +2114,8 @@ impl Selection {
                 choice_markers.as_mut_ptr(),
                 choice_count,
                 curdk_sys::A_NORMAL,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
         .inspect(|selection| {
@@ -1938,6 +2181,7 @@ impl Slider {
         high: i32,
         increment: i32,
         fast_increment: i32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -1958,8 +2202,8 @@ impl Slider {
                 high,
                 increment,
                 fast_increment,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -2000,6 +2244,7 @@ impl Swindow {
         width: u32,
         title_: &str,
         save_lines: u32,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -2016,8 +2261,8 @@ impl Swindow {
                 width,
                 title.as_ptr(),
                 save_lines,
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -2061,6 +2306,7 @@ impl Template {
         label_: &str,
         plate_: &str,
         overlay_: &str,
+        border: Border,
     ) -> Result<Self, Error> {
         let xpos = checked_c_int(xpos as u64, "x position")?;
         let ypos = checked_c_int(ypos as u64, "y position")?;
@@ -2077,8 +2323,8 @@ impl Template {
                 label.as_ptr(),
                 plate.as_ptr(),
                 overlay.as_ptr(),
-                BOX,
-                SHADOW,
+                border.boxed_flag(),
+                border.shadow_flag(),
             )
         })
     }
@@ -2116,6 +2362,35 @@ mod tests {
     }
 
     #[test]
+    fn border_presets_match_box_and_shadow_flags() {
+        assert_eq!(Border::default(), Border::NONE);
+        assert_eq!(
+            Border::NONE,
+            Border {
+                boxed: false,
+                shadow: false
+            }
+        );
+        assert_eq!(
+            Border::BOXED,
+            Border {
+                boxed: true,
+                shadow: false
+            }
+        );
+        assert_eq!(
+            Border::SHADOWED,
+            Border {
+                boxed: true,
+                shadow: true
+            }
+        );
+        assert_eq!(Border::NONE.boxed_flag(), 0);
+        assert_eq!(Border::BOXED.boxed_flag(), 1);
+        assert_eq!(Border::SHADOWED.shadow_flag(), 1);
+    }
+
+    #[test]
     fn null_handle_has_context() {
         let error = Error::NullHandle("Label");
         assert_eq!(error.to_string(), "CDK returned a null Label handle");
@@ -2146,7 +2421,7 @@ mod tests {
         let window = Window::new()?;
         let label = {
             let screen = Screen::new(&window)?;
-            Label::new(&screen, CENTER, TOP, "label")?
+            Label::new(&screen, CENTER, TOP, "label", Border::NONE)?
         };
         label.set_box(false);
         Ok(())
@@ -2157,7 +2432,15 @@ mod tests {
     fn dialog_returns_a_selection() -> Result<(), Error> {
         let window = Window::new()?;
         let screen = Screen::new(&window)?;
-        let dialog = Dialog::new(&screen, CENTER, CENTER, "Continue?", 1, &["Yes", "No"])?;
+        let dialog = Dialog::new(
+            &screen,
+            CENTER,
+            CENTER,
+            "Continue?",
+            1,
+            &["Yes", "No"],
+            Border::NONE,
+        )?;
         assert!(dialog.activate() >= 0);
         Ok(())
     }

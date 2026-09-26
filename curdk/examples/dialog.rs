@@ -8,6 +8,7 @@ fn main() -> Result<(), curdk::Error> {
         "Continue?",
         1,
         &["Yes", "No"],
+        curdk::Border::NONE,
     )?;
 
     let selection = dialog.activate_result()?;

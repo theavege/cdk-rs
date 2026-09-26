@@ -79,8 +79,21 @@ native allocation or a string contains an interior NUL byte:
 ```rust,ignore
 let window = curdk::Window::new()?;
 let screen = curdk::Screen::new(&window)?;
-let label = curdk::Label::new(&screen, curdk::CENTER, curdk::TOP, "Name")?;
-let entry = curdk::Entry::new(&screen, curdk::CENTER, curdk::CENTER, "Input", "Name: ")?;
+let label = curdk::Label::new(
+    &screen,
+    curdk::CENTER,
+    curdk::TOP,
+    "Name",
+    curdk::Border::NONE,
+)?;
+let entry = curdk::Entry::new(
+    &screen,
+    curdk::CENTER,
+    curdk::CENTER,
+    "Input",
+    "Name: ",
+    curdk::Border::NONE,
+)?;
 
 screen.refresh();
 let value = entry.activate()?;
@@ -99,6 +112,33 @@ button boxes, dialogs, menus, lists, and selections also provide
 Call `screen.exit()` when the application should leave CDK's main loop. The
 normal Rust drop order then releases widgets, the screen, and the terminal.
 
+Widget constructors that wrap CDK's `Box` / `Shadow` arguments take a
+`Border`. Use `Border::NONE` for an unframed widget, `Border::BOXED` for a
+border, or `Border::SHADOWED` for a border and drop shadow.
+
+Key bindings and pre/post-process hooks are available on every widget:
+
+```rust,ignore
+entry.bind_key(b'q' as u32, |_| 1)?;
+entry.set_preprocess(|key| if key == b'!' as u32 { 0 } else { 1 });
+```
+
+Return `1` from a key binding to consume the key, `0` to let CDK handle it.
+A preprocess callback returns `1` to apply the character and `0` to ignore it.
+
+To share one event loop across a screen of widgets, call `screen.traverse()`.
+Tab moves focus; a binding that calls `screen.exit()` (or `screen.cancel()`)
+ends the loop. `Screen` is cheap to clone so the callback can own a handle:
+
+```rust,ignore
+let done = screen.clone();
+entry.bind_key(b'x' as u32 & 0x1f, move |_| {
+    done.exit();
+    1
+})?;
+let accepted = screen.traverse();
+```
+
 The repository contains complete examples:
 
 ```sh
@@ -106,6 +146,11 @@ cargo run -p curdk --example counter
 cargo run -p curdk --example temperature_converter
 cargo run -p curdk --example crud
 cargo run -p curdk --example flight_booker
+cargo run -p curdk --example alphalist
+cargo run -p curdk --example template
+cargo run -p curdk --example matrix
+cargo run -p curdk --example swindow
+cargo run -p curdk --example form
 ```
 
 ### Tutorial, part 2: compose a screen
@@ -146,6 +191,7 @@ let results = curdk::Scroll::new(
     "Results",
     &["First result", "Second result"],
     false,
+    curdk::Border::NONE,
 )?;
 let actions = curdk::Buttonbox::new(
     &screen,
@@ -156,6 +202,7 @@ let actions = curdk::Buttonbox::new(
     1,
     2,
     &["Search", "Quit"],
+    curdk::Border::NONE,
 )?;
 ```
 
@@ -175,7 +222,8 @@ accessors. `Selection` additionally exposes per-item boolean choices.
 
 For a complete application-shaped version of this pattern, see the
 `counter`, `booker`, `crud`, `calculator`, and `temperature_converter`
-examples. This section is adapted from the archived
+examples. `form` shows `Screen::traverse` over several widgets. This section
+is adapted from the archived
 [second CDK tutorial](https://web.archive.org/web/20110825004635/http://www.unixgarden.com/index.php/programmation/tutoriel-cdk-partie-2).
 
 ## Other bindings for CDK

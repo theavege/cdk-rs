@@ -44,8 +44,22 @@ fn view(
 fn main() -> Result<(), curdk::Error> {
     let window = curdk::Window::new()?;
     let screen = curdk::Screen::new(&window)?;
-    let celsius = curdk::Entry::new(&screen, curdk::CENTER, 8, "Celsius", "C: ")?;
-    let fahrenheit = curdk::Entry::new(&screen, curdk::CENTER, 12, "Fahrenheit", "F: ")?;
+    let celsius = curdk::Entry::new(
+        &screen,
+        curdk::CENTER,
+        8,
+        "Celsius",
+        "C: ",
+        curdk::Border::NONE,
+    )?;
+    let fahrenheit = curdk::Entry::new(
+        &screen,
+        curdk::CENTER,
+        12,
+        "Fahrenheit",
+        "F: ",
+        curdk::Border::NONE,
+    )?;
     let controls = curdk::Buttonbox::new(
         &screen,
         curdk::CENTER,
@@ -55,6 +69,7 @@ fn main() -> Result<(), curdk::Error> {
         1,
         1,
         &["Quit"],
+        curdk::Border::NONE,
     )?;
     let mut model = Model {
         celsius: "0.00".into(),

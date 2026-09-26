@@ -72,8 +72,10 @@ fn view(model: &Model, status: &curdk::Label, screen: &curdk::Screen) -> Result<
 fn main() -> Result<(), curdk::Error> {
     let window = curdk::Window::new()?;
     let screen = curdk::Screen::new(&window)?;
-    let departure = curdk::Calendar::new(&screen, 4, 3, "Departure", 1, 1, 2026)?;
-    let return_date = curdk::Calendar::new(&screen, 42, 3, "Return", 1, 1, 2026)?;
+    let departure =
+        curdk::Calendar::new(&screen, 4, 3, "Departure", 1, 1, 2026, curdk::Border::NONE)?;
+    let return_date =
+        curdk::Calendar::new(&screen, 42, 3, "Return", 1, 1, 2026, curdk::Border::NONE)?;
     let trip_type = curdk::Radio::new(
         &screen,
         curdk::CENTER,
@@ -85,8 +87,15 @@ fn main() -> Result<(), curdk::Error> {
         &["One-way", "Round-trip"],
         '*',
         0,
+        curdk::Border::NONE,
     )?;
-    let status = curdk::Label::new(&screen, curdk::CENTER, curdk::TOP, "Ready")?;
+    let status = curdk::Label::new(
+        &screen,
+        curdk::CENTER,
+        curdk::TOP,
+        "Ready",
+        curdk::Border::NONE,
+    )?;
     let actions = curdk::Buttonbox::new(
         &screen,
         curdk::CENTER,
@@ -96,6 +105,7 @@ fn main() -> Result<(), curdk::Error> {
         1,
         2,
         &["Book", "Quit"],
+        curdk::Border::NONE,
     )?;
     let mut model = Model {
         departure: calendar_date(&departure),
