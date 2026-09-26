@@ -1,0 +1,21 @@
+[package]
+name = "curdk-sys"
+version = "0.0.1"
+authors = ["Artem V. Ageev <artem.v.ageev@gmail.com>"]
+license = "GPL-2"
+repository = "https://github.com/theavege/cdk-rs"
+description = "Rust bindings for the Curses Development Kit"
+readme = "README.md"
+homepage = "https://github.com/theavege/cdk-rs"
+documentation = "https://docs.rs/curdk-sys"
+keywords = ["CDK", "curdk"]
+categories = ["external-ffi-bindings"]
+edition = "2024"
+exclude = ["example", "use"]
+
+[build-dependencies]
+bindgen = { version = "0.72" }
+cc = { version = "1.2", features = ["parallel"] }
+
+[target.'cfg(target_os = "linux")'.build-dependencies]
+pkg-config = "0.3"
