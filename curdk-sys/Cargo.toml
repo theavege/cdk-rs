@@ -14,7 +14,7 @@ edition = "2024"
 exclude = ["example", "use"]
 
 [build-dependencies]
-bindgen = { version = "0.72" }
+bindgen = { version = "0.73" }
 cc = { version = "1.2", features = ["parallel"] }
 
 [target.'cfg(target_os = "linux")'.build-dependencies]
